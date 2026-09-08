@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 01 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+        <a href="https://eae-git.eng.utah.edu/games6320-fall2026/YangBenjamin" target="_blank" rel="noopener">GitLab</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 01 – Write-Up</h1>
+    <p class="subtitle">Solution setup · Graphics static library · MyGame project · animated triangle</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment01_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment01_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Each ZIP contains <code>MyGame.exe</code>, the <code>data/</code> folder with the built shaders, and the <code>Licenses/</code> folder (no log file, no extra root folder). Double-click <code>MyGame.exe</code> to run; press ESC to exit.</small>
+    </div>
+
+    <h2>1. What I built</h2>
+    <p>I started from the solution provided for the class, renamed the solution file to match my GitLab project (<code>YangBenjamin.sln</code>), and made these changes:</p>
+    <ul>
+      <li><strong>Graphics static library.</strong> Created <code>Engine/Graphics</code> as a Static Library project (no precompiled header), added <code>EngineDefaults.props</code> to all configurations, <code>OpenGL.props</code> to the Win32 (x86) configurations and <code>Direct3D.props</code> to the x64 configurations, and copied in the provided source files. The <code>Direct3D/*.d3d.cpp</code> files are excluded from the x86 build and the <code>OpenGL/*.gl.cpp</code> files are excluded from the x64 build, and the files are organized in Direct3D, OpenGL and Windows filters exactly like the Platform-Specific Code example.</li>
+      <li><strong>My game.</strong> Created the <code>MyGame_</code> folder with the <code>MyGame</code> project, the <code>BuildMyGameAssets</code> project (which depends on ShaderBuilder, UserSettings and AssetBuildExe like the example one) and the <code>Content</code> folder. The new projects have their own GUIDs, the MyGame solution folder is listed first in the <code>.sln</code> so MyGame is the default startup project, and <code>MyGame.props</code> sets <code>GameName</code> to <code>MyGame_</code>.</li>
+      <li><strong>Window caption and icon.</strong> The main window is now called <code>Benjamin Yang's Animated Triangle -- Direct3D/OpenGL -- Debug</code> (the platform and configuration are kept at the end), the window class name was changed too, and the window uses the provided EAE gamepad icon (<code>IDI_EAEGAMEPAD</code>) instead of the Visual Studio default icon.</li>
+      <li><strong>Logging.</strong> <code>cMyGame::Initialize()</code> logs <code>MyGame initialized</code> and <code>cMyGame::CleanUp()</code> logs <code>MyGame cleaned up</code> using <code>Logging::OutputMessage()</code>, which is what the engine projects use.</li>
+      <li><strong>Animated fragment shader.</strong> Copied the standard fragment shader to <code>MyGame_/Content/Shaders/Fragment/animatedColor.shader</code>, added it to <code>AssetsToBuild.lua</code>, and changed both <code>Graphics.d3d.cpp</code> and <code>Graphics.gl.cpp</code> to load <code>data/Shaders/Fragment/animatedColor.shader</code>. The shader computes each color channel as <code>0.5 + 0.5 * sin(g_elapsedSecondCount_simulationTime + phase)</code> with the phases 0, 2π/3 and 4π/3, so the triangle cycles smoothly through the rainbow and every channel stays inside [0, 1]. The HLSL and GLSL branches use identical math so both platforms look the same.</li>
+    </ul>
+
+    <h2>2. Screenshots</h2>
+    <figure>
+      <img src="images/final_d3d_debug.png" alt="MyGame running with Direct3D, showing a colored triangle" width="532">
+      <figcaption>Figure 1 – MyGame running (Direct3D, x64 Debug). The triangle is no longer white; its color changes continuously.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/final_gl.png" alt="MyGame running with OpenGL, showing a colored triangle" width="532">
+      <figcaption>Figure 2 – The same game built for OpenGL (x86). The colors animate identically on both platforms.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/final_log.png" alt="The eae6320.log file with the MyGame initialized and MyGame cleaned up messages">
+      <figcaption>Figure 3 – The generated <code>eae6320.log</code> with the "MyGame initialized" and "MyGame cleaned up" messages.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/shot_noassets_debug.png" alt="Message box shown when the game cannot find its assets">
+      <figcaption>Figure 4 – With <code>temp/</code> deleted and only the MyGame project built, the game reports the problem and exits instead of crashing (after the Debug asserts are cancelled).</figcaption>
+    </figure>
+
+    <h2>3. Project references</h2>
+    <table>
+      <thead><tr><th>Project</th><th>References added / needed</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Graphics</strong> (new)</td><td>Asserts, Concurrency, Logging, Math, Platform, Time, UserOutput, Windows, and External/OpenGlExtensions (found by reading every <code>#include</code> in the Graphics source files and checking which of those libraries define functions in <code>.cpp</code> files)</td></tr>
+        <tr><td><strong>Application</strong></td><td>Graphics – <code>iApplication.cpp</code> and <code>iApplication.win.cpp</code> call <code>Graphics::Initialize()</code>, <code>Graphics::CleanUp()</code>, <code>Graphics::RenderFrame()</code>, <code>Graphics::SubmitElapsedTime()</code>, <code>Graphics::WaitUntilDataForANewFrameCanBeSubmitted()</code> and <code>Graphics::SignalThatAllDataForAFrameHasBeenSubmitted()</code>, all of which are defined in Graphics <code>.cpp</code> files</td></tr>
+        <tr><td><strong>MyGame / ExampleGame</strong></td><td>No direct reference needed – the game never calls a Graphics function itself; it gets <code>Graphics.lib</code> through its reference to Application</td></tr>
+        <tr><td><strong>ShaderBuilder</strong></td><td>Mentions the Graphics namespace but needs <strong>no</strong> reference (see below)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>A project that mentions <code>Graphics::</code> but does not need a reference</h3>
+    <p>Searching the whole solution for <code>Graphics::</code> also finds <code>Tools/ShaderBuilder</code> (<code>cShaderBuilder.cpp</code>, <code>cShaderBuilder.d3d.cpp</code> and <code>cShaderBuilder.gl.cpp</code> use <code>Graphics::eShaderType::Vertex</code> and <code>Graphics::eShaderType::Fragment</code>). These are enumeration values declared in a Graphics header. An enum is fully defined in the header, so the compiler has everything it needs and the linker never has to look for a symbol inside <code>Graphics.lib</code>. A reference (a link-time dependency) is only required when a project calls a function whose body lives in one of the other project's <code>.cpp</code> files. The same is true for <code>Engine/Application/iApplication.h</code>, which only names the <code>Graphics::sInitializationParameters</code> struct type; it is the <code>.cpp</code> files of Application that actually call Graphics functions, which is why Application (and only Application) needed the reference.</p>
+    <p>I also checked the reverse direction. Assets, Results and ScopeGuard only contain an <code>Empty.cpp</code>, so even though Graphics includes their headers it does not need a reference to them; everything it uses from them is inline or a template. Graphics does need <code>External/OpenGlExtensions</code> because <code>sContext.gl.cpp</code> calls <code>OpenGlExtensions::Load()</code>, which only the x86 link would have caught.</p>
+
+    <h2>4. Thoughts about the engine code base</h2>
+    <h3>Organization</h3>
+    <p>The engine is split into many small static libraries (Application, Asserts, Concurrency, Graphics, Logging, Math, Time, UserInput, …) that each own one responsibility, plus <code>Tools</code> for the asset pipeline and <code>External</code> for third-party code. Three property sheets (EngineDefaults, Direct3D, OpenGL) hold all of the shared build settings, so an individual <code>.vcxproj</code> contains almost nothing but its file list and references. I like that the platform-specific code is separated by file name (<code>.win.cpp</code>, <code>.d3d.cpp</code>, <code>.gl.cpp</code>) and by folder rather than by giant <code>#ifdef</code> blocks, and that the same engine builds two games (ExampleGame and MyGame) by just changing one macro (<code>GameName</code>) in a props file. The thing I like least is that a lot of the structure lives in Visual Studio metadata (GUIDs, filters, per-configuration <code>ExcludedFromBuild</code> flags, solution-level dependencies for the asset build) that is easy to get subtly wrong and that only shows up as a linker error or a missing <code>data/</code> folder much later.</p>
+    <h3>Code style</h3>
+    <p>The code is very consistent: <code>c</code>-prefixed classes (<code>cShader</code>), <code>s</code>-prefixed structs (<code>sContext</code>), <code>i_</code>/<code>o_</code>/<code>io_</code> parameter prefixes, results are returned as <code>cResult</code> values that must be checked rather than exceptions, and there are long comments that explain <em>why</em> something is done and not only <em>what</em>. That makes the code base read like documentation, which is great for a class. On the other hand the tab-indented, heavily commented style makes files long, and some names are very verbose (<code>WaitUntilDataForANewFrameCanBeSubmitted</code>). I would not choose that style for my own hobby project, but I can see that it prevents ambiguity when many students work on the same code.</p>
+    <h3>What confused me</h3>
+    <ul>
+      <li>At first I did not understand why the game could not find its shaders even though they were in <code>MyGame_/Content</code>. The answer is that the executable reads the built <code>data/</code> folder inside <code>$(GameInstallDir)</code> (<code>temp/…/MyGame_</code>), which is produced by the BuildMyGameAssets project through AssetBuildExe and ShaderBuilder; the source content folder is never read at run time. Once I traced the <code>AssetsToBuild.lua</code> → AssetBuildExe → ShaderBuilder → <code>data/</code> chain the whole pipeline made sense.</li>
+      <li>It was not obvious how the Windows libraries (<code>d3d11.lib</code>, <code>opengl32.lib</code>, …) get linked, because the property sheets deliberately set <code>AdditionalDependencies</code> to empty. The engine instead force-includes <code>Windows/ExternalLibraries.win.h</code> in every project, and that header uses <code>#pragma comment(lib, …)</code>. My Graphics project needed the same <code>ForcedIncludeFiles</code> setting as the other engine projects; without it the game project failed to link.</li>
+      <li>Creating MyGame by copying ExampleGame's files is tricky because a solution must not contain two projects with the same <code>ProjectGuid</code>, and the "Resource Files" filter needs its own <code>UniqueIdentifier</code>. I also learned that the icon <code>.ico</code> files must be copied as binary files; a corrupted copy makes the resource compiler fail with "old DIB in eaeGamePad.ico".</li>
+    </ul>
+
+    <h2>5. Expectations for the class</h2>
+    <p>After the first lecture I expect this class to be less about writing a lot of gameplay and more about understanding how a real engine is structured: build systems, platform abstraction, asset pipelines, and the discipline of keeping two graphics APIs behaving identically. The assignment already shows that: most of the work was about dependencies and project setup rather than the shader itself.</p>
+    <p>Personally I want to get a solid mental model of the modern graphics pipeline (vertex/fragment shaders, constant buffers, render state) on both Direct3D and OpenGL, and to learn how the asset build pipeline can be extended to meshes, materials and eventually a Maya exporter. I am interested in tools and rendering, so I hope to come out of this class comfortable enough with engine internals that I can read a commercial engine's renderer and understand the decisions behind it, and confident enough with Visual Studio's build system that project setup is never the scary part of a project again.</p>
+
+    <h2>6. Submission checklist</h2>
+    <ul>
+      <li>All four configurations (Debug/Release × x64/x86) build from scratch (<code>temp/</code> deleted) with no errors and no warnings.</li>
+      <li>Deleting <code>temp/</code> and building only the MyGame project, then running it, shows a message to the user and exits without crashing; building BuildMyGameAssets afterwards makes the game run correctly.</li>
+      <li>Both platforms behave identically except for the window title.</li>
+      <li>The git repository contains no <code>temp/</code>, <code>.vs/</code>, <code>*.suo</code> or <code>*.vcxproj.user</code> files, and the ZIP contains no log file and no extra root folder.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">© 2026 Benjamin Yang · <a href="../index.html">Back to all assignments</a></div>
+  </footer>
+</body>
+</html>
