@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 02 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 02</h1>
+    <p class="subtitle">Mesh and effect representations, and a rectangle instead of a triangle</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment02_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment02_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game.</small>
+    </div>
+
+    <h2>What I did</h2>
+    <p>I pulled the "Geometry Data" and "Shading Data" out of <code>Graphics.d3d.cpp</code> / <code>Graphics.gl.cpp</code> into two classes in the Graphics project:</p>
+    <p><strong>cMesh</strong> (<code>cMesh.h</code>, <code>cMesh.cpp</code>, <code>Direct3D/cMesh.d3d.cpp</code>, <code>OpenGL/cMesh.gl.cpp</code>). It owns the vertex buffer (plus the cVertexFormat on D3D, or the vertex array object on OpenGL) and a vertex count. The interface is <code>Initialize( vertexData, vertexCount )</code>, <code>CleanUp()</code> and <code>Draw()</code>. Almost all of it is platform-specific, the shared .cpp only has the destructor that asserts CleanUp() was called.</p>
+    <p><strong>cEffect</strong> (<code>cEffect.h</code>, <code>cEffect.cpp</code>, <code>Direct3D/cEffect.d3d.cpp</code>, <code>OpenGL/cEffect.gl.cpp</code>). It owns the vertex shader, the fragment shader, the cRenderState and, on OpenGL only, the program id. The interface is <code>Initialize( vertexShaderPath, fragmentShaderPath, renderStateBits )</code>, <code>CleanUp()</code> and <code>Bind()</code>. Here a good part is shared: loading the two shaders and initializing the render state is the same on both platforms, and so is releasing the shaders and binding the render state. <code>cEffect.cpp</code> does all of that and calls three small private functions that the platform files implement: <code>InitializePlatformSpecific()</code> (OpenGL creates and links the program, D3D does nothing), <code>CleanUpPlatformSpecific()</code> (OpenGL deletes the program) and <code>BindShaders()</code> (VSSetShader/PSSetShader vs glUseProgram).</p>
+    <p>I did it the way the assignment suggested: move the code first, get it running, commit, then clean up. The static <code>s_vertexBuffer</code>, <code>s_vertexShader</code>, <code>s_programId</code> and so on in the Graphics files are gone; there is now just one <code>cMesh s_mesh</code> and one <code>cEffect s_effect</code>.</p>
+    <p>For the second triangle I changed the vertex count to 6 and added three more vertices so the two triangles make the square from (0,0) to (1,1), which is the upper-right quarter of the screen. For the winding order I did not want to keep two different vertex arrays, so the vertex data in <code>Graphics.[platform].cpp</code> is always written counter-clockwise (the OpenGL / right-handed order) and <code>cMesh.d3d.cpp</code> swaps the second and third vertex of every triangle when it copies the data into the Direct3D buffer. That way the code that creates the mesh is the same in both files and does not have to know about winding order at all. I checked with back-face culling on that both triangles show up on both platforms, so the order is right.</p>
+
+    <h2>Screenshots</h2>
+    <figure>
+      <img src="images/a2_d3d_debug.png" alt="Direct3D build showing a colored rectangle in the upper-right corner" width="532">
+      <figcaption>Direct3D, x64 Debug. The rectangle is in the upper-right corner and still animates its color.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a2_gl_debug.png" alt="OpenGL build showing the same rectangle" width="532">
+      <figcaption>OpenGL, x86 Debug. Same thing.</figcaption>
+    </figure>
+
+    <h3>Direct3D capture (Visual Studio Graphics Analyzer)</h3>
+    <figure>
+      <img src="images/capture_d3d_clear.png" alt="Graphics Analyzer with ClearRenderTargetView selected and a black render target">
+      <figcaption>ClearRenderTargetView() is selected and the render target is all black.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/capture_d3d_draw.png" alt="Graphics Analyzer with Draw selected and the rectangle in the render target">
+      <figcaption>Draw() is selected and the rectangle is in the render target.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/capture_d3d_wireframe.png" alt="Pipeline Stages tab showing the wireframe of two triangles">
+      <figcaption>Pipeline Stages tab for the same Draw() call. The Input Assembler thumbnail shows the mesh as a wireframe.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/capture_d3d_wireframe_zoom.png" alt="Zoomed Input Assembler thumbnail showing a square split into two triangles" width="250">
+      <figcaption>The Input Assembler thumbnail zoomed in: the square with the diagonal is the two triangles.</figcaption>
+    </figure>
+
+    <h3>OpenGL capture (RenderDoc)</h3>
+    <figure>
+      <img src="images/capture_gl_clear.png" alt="RenderDoc with glClear selected and a black texture view">
+      <figcaption>glClear() selected, Texture Viewer tab, the render target is black.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/capture_gl_draw.png" alt="RenderDoc with glDrawArrays selected and the rectangle in the texture view">
+      <figcaption>glDrawArrays() selected, Texture Viewer tab, the rectangle is drawn.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/capture_gl_mesh.png" alt="RenderDoc Mesh Viewer showing the two triangles">
+      <figcaption>glDrawArrays() selected, Mesh Viewer tab (VS Input), the two triangles of the rectangle.</figcaption>
+    </figure>
+
+    <h2>The code that binds the effect and draws the mesh</h2>
+    <p>This is the render part of <code>RenderFrame()</code> in <code>Graphics.d3d.cpp</code>. <code>Graphics.gl.cpp</code> has exactly the same lines.</p>
+<pre><code>	// Bind the shading data
+	{
+		s_effect.Bind();
+	}
+	// Draw the geometry
+	{
+		s_mesh.Draw();
+	}</code></pre>
+    <p>Initialization is also identical in both files:</p>
+<pre><code>	return s_effect.Initialize( "data/Shaders/Vertex/standard.shader", "data/Shaders/Fragment/animatedColor.shader", renderStateBits );
+	...
+	return s_mesh.Initialize( vertexData, vertexCount );</code></pre>
+
+    <h2>What is still different between Graphics.d3d.cpp and Graphics.gl.cpp</h2>
+    <p>After this assignment the two files are almost the same. Submission, the event handling, the frame constant buffer update, the geometry and shading initialization and the clean up are identical. What is left:</p>
+    <ol>
+      <li><strong>Clearing the back buffer and depth buffer.</strong> D3D calls ClearRenderTargetView / ClearDepthStencilView on views it owns; OpenGL calls glClearColor / glClear and glDepthMask / glClearDepth / glClear.</li>
+      <li><strong>Presenting the frame.</strong> D3D calls <code>swapChain->Present()</code>, OpenGL calls <code>SwapBuffers( deviceContext )</code>.</li>
+      <li><strong>The render target and depth stencil views.</strong> Only the D3D file has <code>s_renderTargetView</code> / <code>s_depthStencilView</code>, <code>InitializeViews()</code> and the code that releases them. OpenGL gets its default framebuffer from the context, so there is nothing to create.</li>
+      <li><strong>Includes.</strong> Small things, like the OpenGL file needing <code>&lt;new&gt;</code>.</li>
+    </ol>
+    <p>All of these can be moved behind platform-independent interfaces the same way mesh and effect were:</p>
+    <ul>
+      <li>Put the "screen" into a class, for example <code>cView</code> or <code>cRenderTarget</code>, with <code>Initialize( width, height )</code>, <code>Clear( color, depth )</code>, <code>Present()</code> and <code>CleanUp()</code>. The D3D version would own the two views and the viewport, the OpenGL version would just wrap glClear and SwapBuffers. Then <code>RenderFrame()</code> becomes <code>s_view.Clear(); constant buffer update; s_effect.Bind(); s_mesh.Draw(); s_view.Present();</code> and it looks the same on both platforms.</li>
+      <li>The clear color and depth value could go into the submitted frame data so the platform code does not hard-code black.</li>
+      <li>Or keep the free functions but move them into their own platform files, so <code>Graphics.d3d.cpp</code> only implements <code>ClearBackBuffer()</code>, <code>Present()</code> and <code>InitializeViews()</code> while the whole RenderFrame / Initialize / CleanUp logic lives in a single Graphics.cpp. That is basically what sContext already does for the device.</li>
+    </ul>
+    <p>Once that is done the only platform-specific code left in the Graphics project would be inside the small classes (sContext, cShader, cVertexFormat, cRenderState, cConstantBuffer, cMesh, cEffect, cView), and Graphics.cpp itself would be one file.</p>
+
+    <h2>Notes</h2>
+    <ul>
+      <li>The mesh and effect files follow the naming and location convention from the platform-specific code example: the shared header and .cpp are in <code>Engine/Graphics</code>, the .d3d.cpp files in <code>Engine/Graphics/Direct3D</code> (excluded from the Win32 configurations) and the .gl.cpp files in <code>Engine/Graphics/OpenGL</code> (excluded from x64), and they sit in the Direct3D / OpenGL filters in Solution Explorer.</li>
+      <li>Both cMesh and cEffect are non-copyable and assert in their destructors if CleanUp() was not called, because the GPU objects have to be released while the context still exists.</li>
+      <li>All four configurations build from scratch with no warnings, and deleting temp/ and building only MyGame still shows the "Initialization failed" message instead of crashing.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
