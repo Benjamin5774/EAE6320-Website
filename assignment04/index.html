@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 04 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 04</h1>
+    <p class="subtitle">The game submits what to draw: reference counted meshes and effects, a background color, and input</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment04_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment04_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game, hold <kbd>SPACE</kbd> to hide the triangle, hold <kbd>SHIFT</kbd> to draw the rectangle white.</small>
+    </div>
+
+    <h2>Screenshots</h2>
+    <figure>
+      <img src="images/a4_d3d_default.png" alt="Default state: animated background, green rectangle, white triangle" width="532">
+      <figcaption>Default state. The background is the animated dark blue / teal from Assignment 03, now submitted by the game every frame instead of being hard-coded in Graphics.cpp. The rectangle uses the animated color effect, the triangle the white one.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a4_d3d_space_held.png" alt="SPACE held: the triangle is not drawn" width="532">
+      <figcaption>SPACE held: the game simply does not submit the triangle, so it is not drawn.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a4_d3d_shift_held.png" alt="SHIFT held: the rectangle is drawn white" width="532">
+      <figcaption>SHIFT held: the rectangle is submitted with the white effect instead of the animated one.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a4_gl_default.png" alt="OpenGL build, default state" width="532">
+      <figcaption>The OpenGL (x86) build in the default state, for completeness.</figcaption>
+    </figure>
+
+    <h2>Submitting the background color</h2>
+    <p>This is the code in <code>cMyGame::SubmitDataToBeRendered()</code>:</p>
+<pre><code>	// Background color
+	{
+		const auto t = static_cast&lt;float&gt;( GetElapsedSecondCount_simulation() ) + i_elapsedSecondCount_sinceLastSimulationUpdate;
+		const float red = 0.15f + 0.10f * std::sin( t * 0.7f );
+		const float green = 0.25f + 0.15f * std::sin( t * 0.5f + 2.0f );
+		const float blue = 0.40f + 0.15f * std::sin( t * 0.3f + 4.0f );
+		Graphics::SubmitBackgroundColor( red, green, blue );
+	}</code></pre>
+    <p><code>Graphics::SubmitBackgroundColor( r, g, b, a = 1 )</code> takes the channels as floats in [0, 1]; a fixed color would just be <code>Graphics::SubmitBackgroundColor( 1.0f, 0.0f, 0.0f );</code> for red. The animation is the optional challenge: the two time values passed into SubmitDataToBeRendered() are not what the renderer sees, so I use <code>GetElapsedSecondCount_simulation()</code> (the total simulated time) plus the elapsed-but-not-yet-simulated time the function receives, which is exactly what iApplication passes to <code>Graphics::SubmitElapsedTime()</code>.</p>
+
+    <h2>Submitting a mesh with an effect</h2>
+    <p>The meshes and effects are created once in <code>cMyGame::Initialize()</code> with the factory functions and stored as pointers in the game class:</p>
+<pre><code>	Graphics::cMesh* m_mesh_rectangle = nullptr;
+	Graphics::cMesh* m_mesh_triangle = nullptr;
+	Graphics::cEffect* m_effect_animatedColor = nullptr;
+	Graphics::cEffect* m_effect_white = nullptr;</code></pre>
+<pre><code>	Graphics::cEffect::Load( "data/Shaders/Vertex/standard.shader",
+		"data/Shaders/Fragment/animatedColor.shader", renderStateBits, m_effect_animatedColor );
+	...
+	Graphics::cMesh::Load( vertexData, static_cast&lt;uint16_t&gt;( std::size( vertexData ) ),
+		indexData, static_cast&lt;unsigned int&gt;( std::size( indexData ) ), m_mesh_rectangle );</code></pre>
+    <p>Every frame the game says which mesh goes with which effect, one call per object, in <code>SubmitDataToBeRendered()</code>:</p>
+<pre><code>	// Objects
+	{
+		// The rectangle normally animates its color; while SHIFT is held it is drawn plain white instead
+		Graphics::SubmitMeshToDraw( m_mesh_rectangle, m_isRectangleWhite ? m_effect_white : m_effect_animatedColor );
+		// The triangle disappears while SPACE is held
+		if ( !m_isTriangleHidden )
+		{
+			Graphics::SubmitMeshToDraw( m_mesh_triangle, m_effect_white );
+		}
+	}</code></pre>
+    <p>So "draw mesh A with effect B" is <code>Graphics::SubmitMeshToDraw( A, B )</code>, nothing else. The two booleans come from <code>UpdateSimulationBasedOnInput()</code>, which only records game state:</p>
+<pre><code>void eae6320::cMyGame::UpdateSimulationBasedOnInput()
+{
+	m_isTriangleHidden = UserInput::IsKeyPressed( UserInput::KeyCodes::Space );
+	m_isRectangleWhite = UserInput::IsKeyPressed( UserInput::KeyCodes::Shift );
+}</code></pre>
+    <p>In <code>CleanUp()</code> the game calls <code>DecrementReferenceCount()</code> on its four pointers and sets them to null. Graphics.cpp no longer owns any mesh or effect, and the ExampleGame project, which submits nothing, runs and shows a black window.</p>
+
+    <h2>Why submit instead of drawing immediately</h2>
+    <p>The game logic runs on the application loop thread and the renderer runs on the main thread, and they are deliberately one frame apart: while the render thread is drawing frame N, the application thread is already producing frame N+1. Graphics.cpp keeps two <code>sDataRequiredToRenderAFrame</code> structs and swaps the two pointers every frame, so the application only ever writes to the one the renderer is not reading. If the game called Bind() and Draw() directly from its own thread, it would be touching the GPU context at the same time as the render thread (which Direct3D 11 and OpenGL do not allow from two threads), and the application would have to wait for the GPU to finish before it could continue simulating. Caching everything for the frame (background color, the mesh/effect pairs, the times) in a struct means the render thread has a complete, consistent snapshot to work from, and the application thread never blocks on rendering. The price is that the data has to stay valid until the render thread is done with it, which is exactly why the submit function takes a reference on each mesh and effect and RenderFrame() releases them afterwards.</p>
+
+    <h2>sizeof(cMesh)</h2>
+    <table>
+      <thead><tr><th></th><th>Direct3D (x64)</th><th>OpenGL (x86)</th></tr></thead>
+      <tbody><tr><td>sizeof(cMesh)</td><td>32 bytes</td><td>20 bytes</td></tr></tbody>
+    </table>
+<pre><code>#if defined( EAE6320_PLATFORM_D3D )
+	ID3D11Buffer* m_vertexBuffer = nullptr;      // 8
+	ID3D11Buffer* m_indexBuffer = nullptr;       // 8
+	cVertexFormat* m_vertexFormat = nullptr;     // 8
+#elif defined( EAE6320_PLATFORM_GL )
+	GLuint m_vertexArrayId = 0;                  // 4
+	GLuint m_vertexBufferId = 0;                 // 4
+	GLuint m_indexBufferId = 0;                  // 4
+#endif
+	unsigned int m_indexCount = 0;               // 4
+	EAE6320_ASSETS_DECLAREREFERENCECOUNT()       // uint16_t, 2</code></pre>
+    <p>Direct3D: 24 + 4 + 2 = 30, rounded up to the 8 byte alignment of the pointers, 32. The reference count fits in the padding that was already there in Assignment 03 (32 then, 32 now). OpenGL: 12 + 4 + 2 = 18, rounded up to 4, 20 (it was 16 before; the 2 byte count costs a full 4 because of alignment).</p>
+    <p><strong>Smaller?</strong> The only real candidate is <code>m_indexCount</code>. With 16 bit indices a mesh can still have more than 65535 indices, so I keep it 32 bit; if I capped meshes at 65535 indices it could be a uint16_t, which would make OpenGL 16 bytes (12 + 2 + 2) and Direct3D still 32 (24 + 2 + 2 = 28, padded to 32). On Direct3D the vertex format pointer could be dropped if all meshes shared one cVertexFormat owned by Graphics.cpp, which would give 24 bytes. Those are the only two ways to shrink it; everything else is a GPU handle that Draw() or CleanUp() needs.</p>
+    <p><strong>Bigger?</strong> Yes, by ordering. If the 2 byte reference count were declared first on Direct3D, the compiler would pad it to 8 before the first pointer and the struct would become 40 bytes. On OpenGL putting the count between the GLuints would also force padding (same 20 bytes but with wasted space in the middle). So the safe rule is what I did: pointers / 4 byte members first, the 2 byte count last.</p>
+
+    <h2>sizeof(cEffect)</h2>
+    <table>
+      <thead><tr><th></th><th>Direct3D (x64)</th><th>OpenGL (x86)</th></tr></thead>
+      <tbody><tr><td>sizeof(cEffect)</td><td>56 bytes</td><td>16 bytes</td></tr></tbody>
+    </table>
+<pre><code>	cShader* m_vertexShader = nullptr;           // 8 (D3D) / 4 (GL)
+	cShader* m_fragmentShader = nullptr;         // 8 / 4
+#if defined( EAE6320_PLATFORM_GL )
+	GLuint m_programId = 0;                      // 4
+#endif
+	cRenderState m_renderState;                  // 32 (D3D: three state object pointers + 1 byte of bits) / 1 (GL: the bits)
+	EAE6320_ASSETS_DECLAREREFERENCECOUNT()       // uint16_t, 2</code></pre>
+    <p>Direct3D: 16 + 32 + 2 = 50, padded to 56 (it was 48 in Assignment 03; the reference count costs 8 because there was no spare padding). OpenGL: 4 + 4 + 4 + 1 + 2 = 15, padded to 16, the same as before, because the 2 byte count sits right after the 1 byte render state and uses the padding that was already there.</p>
+    <p><strong>Smaller?</strong> On OpenGL the two cShader pointers are only needed until the program is linked; the effect could release them at the end of Initialize() and store nothing but the program id and the render state bits, 8 bytes. I kept them so that CleanUp() is the same on both platforms and the effect can be asked about its shaders later. On Direct3D the cRenderState is the big member (three D3D state pointers); effects that share the same render state could share one cRenderState through a pointer, which would make an effect 24 bytes. I have not done that because every effect in the game currently has its own and there is no manager to share them yet.</p>
+    <p><strong>Bigger?</strong> Declaring the reference count first on either platform does not change these sizes (the padding just moves), but putting the 1 byte render state bits between two pointers would; the class avoids that because cRenderState is declared after the pointers.</p>
+
+    <h2>Memory budgeted for frame data</h2>
+    <p><code>sDataRequiredToRenderAFrame</code> holds the frame constant buffer data, the background color, a fixed array of 64 mesh/effect pairs and a count:</p>
+<pre><code>	struct sDataRequiredToRenderAFrame
+	{
+		ConstantBufferFormats::sFrame constantData_frame;      // 144 bytes (two float4x4 + two floats + padding)
+		float backgroundColor[4];                              // 16
+		struct sMeshToDraw { cMesh* mesh; cEffect* effect; }
+			meshesToDraw[g_maxMeshesPerFrame];                 // 64 x 16 = 1024 (x64)  /  64 x 8 = 512 (x86)
+		uint16_t meshToDrawCount;                              // 2
+	};</code></pre>
+    <table>
+      <thead><tr><th></th><th>Direct3D (x64)</th><th>OpenGL (x86)</th></tr></thead>
+      <tbody>
+        <tr><td>sizeof(sDataRequiredToRenderAFrame)</td><td>1192 bytes</td><td>676 bytes</td></tr>
+        <tr><td>two of them</td><td>2384 bytes</td><td>1352 bytes</td></tr>
+      </tbody>
+    </table>
+    <p>That is the whole budget the Graphics project reserves for frame data; it is static memory, nothing is allocated per frame. I did not count the memory the pointers point at: the meshes and effects are owned by the game (Graphics only holds a reference), and their GPU buffers live in video memory, not in these structs. If the game submits more than 64 objects in one frame, <code>SubmitMeshToDraw()</code> asserts in debug builds and returns a failure (and just skips the object) in release builds.</p>
+
+    <h2>Notes</h2>
+    <ul>
+      <li>Meshes and effects use the class's <code>ReferenceCountedAssets.h</code> macros: <code>cMesh::Load()</code> / <code>cEffect::Load()</code> are the only way to create one (they return a cResult and hand the pointer back through an out parameter, like cShader::Load()), the constructors, destructors, Initialize() and CleanUp() are private, and <code>DecrementReferenceCount()</code> deletes the object when the last reference goes away.</li>
+      <li><code>SubmitMeshToDraw()</code> increments both reference counts; <code>RenderFrame()</code> releases them after drawing and resets the count, and <code>Graphics::CleanUp()</code> does the same for both frame structs so nothing leaks if the game exits with a frame submitted but not rendered. Exiting with ESC in a debug build produces no asset asserts.</li>
+      <li>MyGame now references the Graphics project directly, since game code calls cMesh::Load(), cEffect::Load() and the submit functions.</li>
+      <li>All four configurations build from scratch with no warnings and both platforms behave the same.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
