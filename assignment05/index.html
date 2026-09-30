@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 05 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 05</h1>
+    <p class="subtitle">A camera, game objects that move, a draw-call constant buffer and shaders written once for both platforms</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment05_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment05_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game. Arrow keys move the colored object, hold <kbd>SPACE</kbd> to give it the triangle mesh, hold <kbd>SHIFT</kbd> to draw it white. <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> move the camera and <kbd>Q</kbd>/<kbd>E</kbd> turn it.</small>
+    </div>
+
+    <h2>Screenshots</h2>
+    <figure>
+      <img src="images/a5_d3d_1_default.png" alt="Start of the game" width="532">
+      <figcaption>Start of the game. The camera is at (0, 0, 10) looking down -z with a 45 degree vertical field of view, near plane 0.1 and far plane 100; the unit square from Assignment 02 sits at the origin, so its lower-left corner is at the center of the window, the same as the reference image in the assignment. The white triangle on the left is a second game object that spins around its own y axis.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a5_d3d_2_object_moved.png" alt="RIGHT and UP were held for about a second: the square moved about two units right and two units up" width="532">
+      <figcaption>RIGHT and UP were held for about a second: the square moved about two units right and two units up. Same camera as above.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a5_d3d_3_triangle_same_position.png" alt="SPACE held with the object at the same position as the previous screenshot: the same game object is now submitted with the triangle mesh instead of the square" width="532">
+      <figcaption>SPACE held with the object at the same position as the previous screenshot: the same game object is now submitted with the triangle mesh instead of the square.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a5_d3d_4_camera_moved.png" alt="The camera moved: D and W were held for 0" width="532">
+      <figcaption>The camera moved: D and W were held for 0.6 seconds, so it went about 1.8 units right and 1.8 units forward. The square shifts to the left and gets bigger, and the spinner has left the view.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a5_d3d_5_camera_turned.png" alt="The camera turned right with E" width="532">
+      <figcaption>The camera turned right with E. The square is now off to the side of the view and shows the perspective distortion you expect from a real projection.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a5_gl_1_default.png" alt="The OpenGL (x86) build at the start of the game, identical to Direct3D" width="532">
+      <figcaption>The OpenGL (x86) build at the start of the game, identical to Direct3D.</figcaption>
+    </figure>
+    <h2>The camera</h2>
+    <p>A camera is a rigid body plus the numbers that describe its lens. It lives in the game project as <code>cCamera</code> (cCamera.h / cCamera.cpp):</p>
+<pre><code>class cCamera
+{
+public:
+	// Movement (velocity is given relative to where the camera is facing)
+	void SetVelocity_local( const float i_right, const float i_up, const float i_forward );
+	void SetAngularSpeed_yaw( const float i_radiansPerSecond );
+	void Update( const float i_secondCountToIntegrate );
+	// Transforms for rendering (position and orientation are extrapolated)
+	Math::cMatrix_transformation GetWorldToCameraTransform( const float i_secondCountToExtrapolate ) const;
+	Math::cMatrix_transformation GetCameraToProjectedTransform() const;
+
+	Physics::sRigidBodyState rigidBodyState;
+	float verticalFieldOfView_inRadians = Math::ConvertDegreesToRadians( 45.0f );
+	float aspectRatio = 1.0f;	// width / height
+	float z_nearPlane = 0.1f;
+	float z_farPlane = 100.0f;
+};</code></pre>
+    <p>Reusing <code>sRigidBodyState</code> means the camera moves and turns exactly like any other object: input sets a velocity (and an angular speed around the local y axis), <code>Update()</code> integrates it at the simulation rate, and the two transform functions extrapolate before building the matrices. The world-to-camera matrix comes from <code>cMatrix_transformation::CreateWorldToCameraTransform( orientation, position )</code> and the projection from <code>CreateCameraToProjectedTransform_perspective( fov, aspect, near, far )</code>. The aspect ratio is read from the window resolution in <code>cMyGame::Initialize()</code>, so it stays correct if the window size in settings.ini changes.</p>
+    <p>"Forward" for a camera is its local -z axis, so <code>SetVelocity_local( right, up, forward )</code> builds the local vector (right, up, -forward) and rotates it by the current orientation to get a world-space velocity. That is what makes W still mean "the way I am looking" after the camera has been turned with Q or E.</p>
+    <h2>The game object</h2>
+    <p>A game object is where something is and how it moves, what shape it has, and how it is drawn. It is a plain struct in the game project, <code>sGameObject</code> (sGameObject.h):</p>
+<pre><code>struct sGameObject
+{
+	Physics::sRigidBodyState rigidBodyState;
+	Graphics::cMesh* mesh = nullptr;
+	Graphics::cEffect* effect = nullptr;
+
+	void SetMesh( Graphics::cMesh* const i_mesh );		// takes a reference, releases the old one
+	void SetEffect( Graphics::cEffect* const i_effect );	// same
+	void Update( const float i_secondCountToIntegrate )	{ rigidBodyState.Update( i_secondCountToIntegrate ); }
+	void SubmitToBeRendered( const float i_secondCountToExtrapolate ) const
+	{
+		if ( mesh &amp;&amp; effect )
+		{
+			Graphics::SubmitMeshToDraw( mesh, effect, rigidBodyState.PredictFutureTransform( i_secondCountToExtrapolate ) );
+		}
+	}
+	void CleanUp()	{ SetMesh( nullptr ); SetEffect( nullptr ); }
+};</code></pre>
+    <p>The three data members are the whole representation. <code>rigidBodyState</code> holds position, velocity, acceleration, orientation and angular velocity; the game only ever writes the velocity (arrow keys) or the angular speed (the spinner) and lets the physics struct do the rest. <code>mesh</code> and <code>effect</code> are pointers to reference counted assets: the object increments the count when it takes one and decrements it when it lets go, so the same mesh can be shared by several objects (the spinner and the player both use the triangle mesh while SPACE is held) and nothing is deleted while an object still uses it. I made it a struct with public data instead of a class with accessors because a game object is game data that the game changes directly; the small member functions are there so the reference counting and the extrapolation are written in one place.</p>
+    <p>The game owns two of them plus the camera:</p>
+<pre><code>	cCamera m_camera;
+	sGameObject m_object_player;	// arrow keys, SPACE swaps its mesh, SHIFT swaps its effect
+	sGameObject m_object_spinner;	// a white triangle that rotates on its own</code></pre>
+    <h2>Submitting a frame</h2>
+    <p>The graphics interface gained one function and one parameter:</p>
+<pre><code>void SubmitCamera( const Math::cMatrix_transformation&amp; i_transform_worldToCamera,
+	const Math::cMatrix_transformation&amp; i_transform_cameraToProjected );
+cResult SubmitMeshToDraw( cMesh* const i_mesh, cEffect* const i_effect,
+	const Math::cMatrix_transformation&amp; i_transform_localToWorld );</code></pre>
+    <p>This is <code>cMyGame::SubmitDataToBeRendered()</code> in full:</p>
+<pre><code>void eae6320::cMyGame::SubmitDataToBeRendered( const float i_elapsedSecondCount_systemTime, const float i_elapsedSecondCount_sinceLastSimulationUpdate )
+{
+	// Background color (unchanged from Assignment 04)
+	{
+		...
+		Graphics::SubmitBackgroundColor( red, green, blue );
+	}
+	// Camera
+	{
+		Graphics::SubmitCamera( m_camera.GetWorldToCameraTransform( i_elapsedSecondCount_sinceLastSimulationUpdate ),
+			m_camera.GetCameraToProjectedTransform() );
+	}
+	// Objects
+	{
+		m_object_player.SubmitToBeRendered( i_elapsedSecondCount_sinceLastSimulationUpdate );
+		m_object_spinner.SubmitToBeRendered( i_elapsedSecondCount_sinceLastSimulationUpdate );
+	}
+}</code></pre>
+    <p>The graphics system does not know what a camera or a game object is. <code>SubmitCamera()</code> copies the two matrices straight into the frame constant data (<code>sFrame::g_transform_worldToCamera</code> and <code>g_transform_cameraToProjected</code>), which was already being sent to the GPU once per frame; the position, orientation, field of view and planes stay in the game. <code>SubmitMeshToDraw()</code> copies the local-to-world matrix into the frame's list next to the mesh and effect pointers. The extrapolation happens on the game side, before submission, so the renderer never has to know about velocities either.</p>
+    <p>Input is handled the same way as before, only it now sets velocities instead of booleans. <code>UpdateSimulationBasedOnInput()</code> reads the keys and writes <code>rigidBodyState.velocity</code> (arrow keys, 2 units per second), the camera's local velocity (W/A/S/D, 3 units per second) and its yaw speed (Q/E, 1 radian per second); it also swaps the player's mesh or effect while SPACE or SHIFT is held. <code>UpdateSimulationBasedOnTime()</code> calls <code>Update()</code> on the camera and both objects with the fixed time step. Nothing about positions is decided when a key is pressed; the key only says how fast to go.</p>
+    <h2>The draw-call constant buffer</h2>
+    <p>Graphics.cpp now has two constant buffer objects. <code>s_constantBuffer_frame</code> (register b0 / binding 0) is updated once per frame as before. <code>s_constantBuffer_drawCall</code> (<code>ConstantBufferTypes::DrawCall</code>, register b2 / binding 2) holds <code>ConstantBufferFormats::sDrawCall</code>, which is a single <code>cMatrix_transformation g_transform_localToWorld</code>. Both are initialized and bound once in <code>Graphics::Initialize()</code> and cleaned up in <code>Graphics::CleanUp()</code>; the draw-call one is only bound to the vertex shader because that is the only stage that needs the transform. The render loop became:</p>
+<pre><code>	for ( uint16_t i = 0; i &lt; frameData.meshToDrawCount; ++i )
+	{
+		const auto&amp; meshToDraw = frameData.meshesToDraw[i];
+		s_constantBuffer_drawCall.Update( &amp;meshToDraw.constantData_drawCall );
+		meshToDraw.effect-&gt;Bind();
+		meshToDraw.mesh-&gt;Draw();
+	}</code></pre>
+    <p>The frame data struct's per-object entry grew from two pointers to this:</p>
+<pre><code>	struct sMeshToDraw
+	{
+		ConstantBufferFormats::sDrawCall constantData_drawCall;	// 64 bytes (one float4x4)
+		cMesh* mesh = nullptr;		// 8 (x64) / 4 (x86)
+		cEffect* effect = nullptr;	// 8 / 4
+	} meshesToDraw[g_maxMeshesPerFrame];	// 64 entries</code></pre>
+    <table>
+      <thead><tr><th></th><th>Direct3D (x64)</th><th>OpenGL (x86)</th></tr></thead>
+      <tbody>
+        <tr><td>sizeof(sDrawCall)</td><td>64 bytes</td><td>64 bytes</td></tr>
+        <tr><td>sizeof(sMeshToDraw), cached per draw call</td><td>80 bytes</td><td>72 bytes</td></tr>
+        <tr><td>sizeof(sDataRequiredToRenderAFrame)</td><td>5288 bytes</td><td>4772 bytes</td></tr>
+        <tr><td>two of them</td><td>10576 bytes</td><td>9544 bytes</td></tr>
+      </tbody>
+    </table>
+    <p>So each draw call caches 80 bytes on x64 (72 on x86), measured with sizeof() in a temporary log message: the 64 byte matrix plus the two pointers, with no padding because the matrix is 4 byte aligned floats and the pointers follow it. The whole frame struct is 144 (sFrame) + 16 (background color) + 64 x 80 (draw calls) + 2 (count) = 5282, padded to 5288 for the pointers; on x86 it is 144 + 16 + 64 x 72 + 2 = 4770, padded to 4772. That is still static memory and still nothing is allocated per frame.</p>
+    <p>I cache the matrix rather than the rigid body state or a pointer to the game object for two reasons. A pointer would tie the renderer's frame to game memory that the application thread keeps changing (and could free), which is exactly what the double-buffered submission is meant to avoid. And caching the rigid body state (position, velocity, acceleration, orientation, axis, speed: 56 bytes) would save eight bytes per draw call but would move the extrapolation into the renderer, which then needs to know how much time to extrapolate by and how to build the matrix; the matrix is the one thing the GPU actually needs, so it is what gets cached.</p>
+    <h2>Shaders written once</h2>
+    <p>All of the platform differences now live in shaders.inc. It #defines the HLSL type names for GLSL (<code>float2</code>, <code>float3</code>, <code>float4</code>, <code>float4x4</code>), a <code>DeclareConstantBuffer( name, id )</code> macro that expands to <code>cbuffer name : register( b&lt;id&gt; )</code> or <code>layout( std140, binding = &lt;id&gt; ) uniform name</code>, a <code>MultiplyMatrixVector( m, v )</code> macro that expands to <code>mul( m, v )</code> or <code>( m * v )</code>, and then declares both constant buffers once:</p>
+<pre><code>DeclareConstantBuffer( g_constantBuffer_frame, 0 )
+{
+	float4x4 g_transform_worldToCamera;
+	float4x4 g_transform_cameraToProjected;
+	float g_elapsedSecondCount_systemTime;
+	float g_elapsedSecondCount_simulationTime;
+	float2 g_padding;
+};
+DeclareConstantBuffer( g_constantBuffer_drawCall, 2 )
+{
+	float4x4 g_transform_localToWorld;
+};</code></pre>
+    <p>With that, the only thing left inside a <code>#if defined( EAE6320_PLATFORM_D3D )</code> in a shader file is the entry point signature (HLSL declares inputs and outputs as parameters with semantics, GLSL as globals with layout locations), plus one line at the end of the vertex shader because HLSL writes the projected position to its <code>SV_POSITION</code> output while GLSL writes <code>gl_Position</code>. The body of main() is shared:</p>
+<pre><code>{
+	// Transform the local vertex into world space
+	float4 vertexPosition_world;
+	{
+		float4 vertexPosition_local = float4( i_vertexPosition_local, 1.0 );
+		vertexPosition_world = MultiplyMatrixVector( g_transform_localToWorld, vertexPosition_local );
+	}
+	// Calculate the position of this vertex projected onto the display
+	float4 vertexPosition_projected;
+	{
+		float4 vertexPosition_camera = MultiplyMatrixVector( g_transform_worldToCamera, vertexPosition_world );
+		vertexPosition_projected = MultiplyMatrixVector( g_transform_cameraToProjected, vertexPosition_camera );
+	}
+#if defined( EAE6320_PLATFORM_D3D )
+	o_vertexPosition_projected = vertexPosition_projected;
+#elif defined( EAE6320_PLATFORM_GL )
+	gl_Position = vertexPosition_projected;
+#endif
+}</code></pre>
+    <p>The two fragment shaders (white and animated color) have a single shared body each. The GLSL side is run through mcpp by the shader builder, so I checked the generated data/shaders/vertex/standard.shader in the OpenGL build: the macros expand to exactly the hand-written GLSL from Assignment 04 with the extra uniform block and multiplication.</p>
+    <h2>Why extrapolate</h2>
+    <p>The simulation runs at a fixed rate, 15 updates per second in this engine (<code>GetSimulationUpdatePeriod_inSeconds()</code> returns 1/15), while frames are rendered as fast as the display allows, 60 or more per second. If <code>SubmitDataToBeRendered()</code> simply submitted <code>rigidBodyState.position</code>, four or more consecutive frames would show the object in the same place and then it would jump by a whole simulation step's worth of movement (2 units per second / 15 = 0.13 units for the player, 0.2 units for the camera). At 60 Hz that is a visible stutter, and it gets worse the faster things move.</p>
+    <p>The application passes <code>i_elapsedSecondCount_sinceLastSimulationUpdate</code> into the submit function: how much real time has passed since the simulation last ran, somewhere between 0 and 1/15 of a second. <code>PredictFuturePosition( t )</code> returns position + velocity x t, and <code>PredictFutureOrientation( t )</code> does the same with the angular speed, so every rendered frame shows where the object should be right now, not where it was at the last simulation tick. That is what makes the square glide instead of step, and it is why the camera transform is extrapolated too: a stuttering camera makes the whole world stutter.</p>
+    <p>The cost is that the renderer is showing a prediction. If the velocity changes at the next simulation update (a key is released), the object was drawn slightly past where the simulation will put it and snaps back by at most one frame's worth of movement. In practice that is not noticeable at these speeds, and it is far better than the alternative; interpolation between the two previous states would remove the snap but would show everything one simulation step (67 ms) late.</p>
+    <h2>Notes</h2>
+    <ul>
+      <li>Depth testing and depth writing are enabled in the effect's render state now that objects have real depth, and both triangle sides are drawn so the spinner stays visible when its back faces the camera.</li>
+      <li>The spinner is driven entirely by <code>sRigidBodyState</code>: angularVelocity_axis_local is (0, 1, 0) and angularSpeed is 0.8 rad/s; nothing in the game touches its orientation directly, and its orientation is extrapolated with <code>PredictFutureTransform()</code> like the position.</li>
+      <li>Camera and game object are in the MyGame project (cCamera.h/.cpp, sGameObject.h) rather than in the engine, because the engine's Graphics project should not depend on Physics and the input mapping is game specific. Both only use engine types, so they can be moved into an engine project later without changes.</li>
+      <li>ExampleGame, which submits no camera and no objects, still builds, runs and exits cleanly (it shows a black window with identity transforms).</li>
+      <li>All four configurations build from scratch with no warnings, both platforms render identically, and ESC in a debug build exits with no reference count asserts.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
