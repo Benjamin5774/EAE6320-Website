@@ -56,6 +56,10 @@
       <figcaption>Debugging MeshBuilder in Visual Studio: the debugger is stopped on the first line of main() in EntryPoint.cpp (yellow arrow, and the call stack window shows MeshBuilder.exe!main at line 14). MeshBuilder.exe was started under the debugger with the two command arguments that AssetBuildFunctions.lua passes when it builds square.mesh: the source path in MyGame_/Content/meshes and the target path in the game's data/meshes folder.</figcaption>
     </figure>
     <figure>
+      <img src="images/a6_debug_meshbuilder_zoom.png" alt="The editor area of the same debugging session, enlarged: the yellow arrow on the opening brace of main() in EntryPoint" width="900">
+      <figcaption>The editor area of the same debugging session, enlarged: the yellow arrow on the opening brace of main() in EntryPoint.cpp, the process box showing meshbuilder.exe, and the call stack entry MeshBuilder.exe!main(...) line 14.</figcaption>
+    </figure>
+    <figure>
       <img src="images/a6_test_no_assets_messagebox.png" alt="The TA scenario: MyGame" width="532">
       <figcaption>The TA scenario: MyGame.exe started from a folder with no data/. The mesh file isn't found, cMesh::Load() fails, initialization fails, and the game shows this message and exits with code 1 instead of crashing.</figcaption>
     </figure>
