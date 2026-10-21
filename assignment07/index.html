@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 07 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 07</h1>
+    <p class="subtitle">A Maya plug-in that exports meshes in my human-readable format, three meshes made in Maya, depth buffering, and vertex colors</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment07_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment07_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game. Arrow keys move the sphere, hold <kbd>SPACE</kbd> to give it the triangle mesh, hold <kbd>SHIFT</kbd> to draw it with the plain vertex-color effect. <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> move the camera and <kbd>Q</kbd>/<kbd>E</kbd> turn it.</small>
+    </div>
+
+    <h2>Screenshots</h2>
+    <figure>
+      <img src="images/a7_d3d_1_default.png" alt="Start of the game (Direct3D, x64)" width="532">
+      <figcaption>Start of the game (Direct3D, x64). All three meshes come from Maya: the 8 x 8 floor plane with a different vertex color in each corner, the sphere (the movable object, drawn with the animated color effect multiplied by its vertex colors), and the coil on the left (the spinner, white effect, so it shows its vertex colors as they are). Nearer surfaces hide farther ones because depth testing and depth writing are on.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a7_gl_1_default.png" alt="The OpenGL (x86) build at the start of the game, identical to Direct3D" width="532">
+      <figcaption>The OpenGL (x86) build at the start of the game, identical to Direct3D.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a7_d3d_2_shift.png" alt="SHIFT held: the sphere is drawn with the plain effect, which shows the vertex colors I painted in Maya (orange at the bottom to yellow at the top)" width="532">
+      <figcaption>SHIFT held: the sphere is drawn with the plain effect, which shows the vertex colors I painted in Maya (orange at the bottom to yellow at the top). The coil has magenta, cyan and yellow bands.</figcaption>
+    </figure>
+    <h2>The meshes from Maya</h2>
+    <p>All three meshes are Maya polygon primitives with vertex colors, exported with my plug-in into <code>MyGame_/Content/Meshes/</code> and listed in AssetsToBuild.lua next to the hand-written ones from Assignment 06. The Maya scenes are saved in <code>MyGame_/Maya/</code> (floor.ma, sphere.ma, coil.ma) so they can be changed and re-exported later.</p>
+    <table>
+      <thead><tr><th>Mesh</th><th>Maya</th><th>Exported</th></tr></thead>
+      <tbody>
+        <tr><td>floor.mesh (floor, white effect)</td><td>Plane 8 x 8, 1 x 1 subdivisions</td><td>4 vertices, 2 triangles</td></tr>
+        <tr><td>sphere.mesh (movable object)</td><td>Sphere radius 0.5, 24 x 16</td><td>1488 vertices, 720 triangles</td></tr>
+        <tr><td>coil.mesh (spinner)</td><td>Helix, 3 coils, height 1.5</td><td>8664 vertices, 4340 triangles</td></tr>
+      </tbody>
+    </table>
+    <p>The exported vertex counts are higher than Maya's because the exporter makes one engine vertex for every distinct combination of position, normal, tangent, texture coordinate and color. Where a UV seam or a hard edge meets a position, Maya stores one point but the GPU needs two vertices.</p>
+    <p>Instead of clicking through the menus three times I wrote the steps down as a script, <code>MyGame_/Maya/create_and_export_meshes.py</code>. It runs in Maya's Python (<code>mayapy</code>), creates each primitive, paints its vertex colors, saves the .ma file and exports it with <code>cmds.file( ..., type="Benjamin Yang's EAE6320 Mesh Format", exportSelected=True )</code>. That is exactly what File &gt; Export Selection does in the Maya window, so the meshes can also be made by hand.</p>
+    <h2>Depth buffering</h2>
+    <p>The effects already took render state bits when they were created, so turning depth buffering on was two lines in the render state that both of the game's effects share:</p>
+<pre><code>uint8_t renderStateBits = 0;
+Graphics::RenderStates::DisableAlphaTransparency( renderStateBits );
+// Objects now live in a 3D world, so nearer ones should hide farther ones
+Graphics::RenderStates::EnableDepthTesting( renderStateBits );
+Graphics::RenderStates::EnableDepthWriting( renderStateBits );
+// The spinner turns its back to the camera half of the time and should still be visible
+Graphics::RenderStates::EnableDrawingBothTriangleSides( renderStateBits );</code></pre>
+    <h2>The MayaMeshExporter project</h2>
+    <p>The provided project is in <code>Tools/MayaMeshExporter/</code> on disk and in the Tools folder in Solution Explorer, next to MeshBuilder and ShaderBuilder. It got a new project GUID, the v143 toolset, and my own target names, <code>eae6320_OWNBY_YangBenjamin_mesh</code> and <code>eae6320_OWNBY_YangBenjamin_mesh_DEBUG</code>. The paths come only from environment variables: the Maya headers and libraries from <code>$(DEVKIT_LOCATION)\include\</code> and <code>$(DEVKIT_LOCATION)\lib\</code>, and a custom build step copies the .mll to <code>$(MAYA_PLUG_IN_PATH)</code>, where Maya's Plug-in Manager finds both builds.</p>
+    <p>The plug-in only has an x64 platform. In the Configuration Manager every solution platform (x64 and x86) builds its x64 configuration. A plug-in is a DLL that Maya loads into its own process, and Maya is 64-bit only, so a 32-bit plug-in could never be loaded. Maya's libraries are also 64-bit only, so it could not even be linked. Building it while building the 32-bit OpenGL game is fine, because the plug-in has nothing to do with the game's platform.</p>
+    <p><strong>What references did I have to add to MayaMeshExporter? None.</strong> The plug-in links only Maya's libraries (Foundation.lib and OpenMaya.lib, through <code>#pragma comment</code> in Windows/ExternalLibraries.win.h, found in <code>$(DEVKIT_LOCATION)\lib\</code>). The only engine file it uses is <code>Engine/Windows/Includes.h</code>, so that windows.h is included the same way as everywhere else. That file is header-only and the include path comes from the EngineDefaults property sheet, so no engine library has to be linked. The plug-in runs inside Maya, not inside the game, so it shouldn't link engine code it doesn't need.</p>
+    <p><strong>What other projects depend on MayaMeshExporter? None.</strong> Neither the game nor BuildMyGameAssets needs it. The exporter is run by a person in Maya, and its output (the .mesh files) is committed under <code>MyGame_/Content/Meshes/</code>. From there the normal asset build copies those files with MeshBuilder, the same way it handles the hand-written meshes. If BuildMyGameAssets depended on the exporter, building the game would need the Maya devkit and the environment variables. To check this, I cloned the tag into an empty folder, unset the three Maya variables, and built only MyGame and BuildMyGameAssets in all four configurations. They built and produced all five meshes.</p>
+    <h2>What the exporter writes</h2>
+    <p>The plug-in writes the same Lua format that I designed by hand in Assignment 06 (vertices are an array of dictionaries, triangles are an array of <code>{ a, b, c }</code> counted from 0 and listed counter-clockwise), with a few comments added. This is the start of the exported floor:</p>
+<pre><code>return
+{
+	-- Exported from Maya by Benjamin Yang's EAE6320 mesh exporter
+	-- 4 vertices, 2 triangles
+
+	vertices =
+	{
+		{	-- 0
+			position = { x = -4, y = 0, z = 4 },
+			color = { r = 0.1, g = 0.3, b = 0.9, a = 1 },
+			normal = { x = 0, y = 1, z = 0 },
+			tangent = { x = 1, y = 0, z = 0 },
+			bitangent = { x = 0, y = 0, z = -1 },
+			texcoord = { u = 0, v = 0 },
+		},
+		-- ... vertices 1 to 3 look the same ...
+	},
+
+	triangles =
+	{
+		{ 0, 1, 2 },	-- 0
+		{ 2, 1, 3 },	-- 1
+	},
+}</code></pre>
+    <p>Maya is right-handed with +y up, winds triangles counter-clockwise and puts the UV origin at the lower left. Those are the conventions my format uses, so nothing is converted. The Direct3D-specific index swap still happens only in cMesh.d3d.cpp.</p>
+    <p><strong>Did I export the unused data? Yes.</strong> Every vertex also has its normal, tangent, bitangent and texture coordinate, even though the engine reads only position and color for now. I chose this because re-exporting is the expensive step: it means opening every Maya file and exporting every mesh again by hand. Lighting and texturing are on the way, and when they arrive the data will already be in the files. Only the loader has to change. The format makes this free to ignore: the loader looks values up by name, so it never sees the keys it doesn't ask for, and the Assignment 06 meshes without these keys still load. The cost is size (coil.mesh is 3.2 MB of text) and parse time. That's acceptable for the human-readable source format, and a binary built format can drop whatever the game doesn't use.</p>
+    <h2>Debugging the plug-in</h2>
+    <figure>
+      <img src="images/a7_debug_initializePlugin.png" alt="Visual Studio attached (native code) to Maya, stopped in initializePlugin() in EntryPoint" width="900">
+      <figcaption>Visual Studio attached (native code) to Maya, stopped in initializePlugin() in EntryPoint.cpp as Maya loads the DEBUG build of the plug-in. The process box shows the Maya process, and the call stack shows eae6320_OWNBY_YangBenjamin_mesh_DEBUG.mll!initializePlugin(...) line 35, so the plug-in and its symbols are loaded.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a7_debug_initializePlugin_zoom.png" alt="The same moment, enlarged: the yellow arrow on the first line of initializePlugin()" width="760">
+      <figcaption>The same moment, enlarged: the yellow arrow on the first line of initializePlugin().</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a7_debug_writer.png" alt="After continuing, Maya exports a cube with "Benjamin Yang's EAE6320 Mesh Format -- DEBUG" and the debugger stops in cMayaMeshExporter::writer(), before the vertex data is gathered" width="900">
+      <figcaption>After continuing, Maya exports a cube with "Benjamin Yang's EAE6320 Mesh Format -- DEBUG" and the debugger stops in cMayaMeshExporter::writer(), before the vertex data is gathered.</figcaption>
+    </figure>
+    <p>The debugger was attached to <code>mayapy.exe</code>, which is Maya running without its window (the same program that runs my export script). Once it was waiting, I set breakpoints in <code>initializePlugin()</code> and <code>writer()</code>, used Debug &gt; Attach to Process with the code type set to Native, then loaded <code>eae6320_OWNBY_YangBenjamin_mesh_DEBUG</code> and exported a cube. One thing went wrong first: with the code type left on automatic, the breakpoints were never hit. Choosing Native code fixed it, which is what the assignment warns about.</p>
+    <h2>Too many vertices</h2>
+    <p>The limit is <strong>65536 vertices per mesh</strong>, because the index buffer stores each index as a 16-bit <code>uint16_t</code>. A triangle can therefore only refer to vertices 0 to 65535. A larger mesh can't be drawn with 16-bit indices, and the engine is meant to keep that limit for now.</p>
+    <p>To test it I exported a sphere with 260 x 260 subdivisions (67342 Maya points, 269880 exported vertices) and copied it over sphere.mesh. Both sides handle it without crashing:</p>
+    <ul>
+      <li><strong>In Maya</strong>, the exporter still writes the file but prints a warning in the Script Editor right away: <code>This mesh has 269880 vertices, but the EAE6320 engine can only load meshes with up to 65536 vertices</code>. The artist learns about the problem at export time instead of from a broken game later.</li>
+      <li><strong>In the game</strong>, the loader checks the length of the vertices table before allocating anything and fails with a specific message in eae6320.log: <code>The mesh file "data/Meshes/sphere.mesh" has 269880 vertices, but a mesh can have at most 65536</code>. (Debug builds also assert.) cMesh::Load() returns the failure, initialization fails, the game shows the message box below, cleans up and exits with code 1.</li>
+    </ul>
+    <figure>
+      <img src="images/a7_too_many_vertices_dialog.png" alt="The game with a 269880-vertex sphere" width="532">
+      <figcaption>The game with a 269880-vertex sphere.mesh: no crash and no garbled mesh, just this message, the reason in the log, and a clean exit.</figcaption>
+    </figure>
+    <p>While testing the limit I found a bug at the boundary. A mesh with exactly 65536 vertices passed the check, but Load() then passed <code>static_cast&lt;uint16_t&gt;( vertices.size() )</code> to Initialize(), and 65536 wraps around to 0. Indices must fit in 16 bits but the count of vertices doesn't, so <code>Initialize()</code> now takes the vertex count as <code>unsigned int</code>. A 65536-vertex mesh is therefore created with all of its vertices.</p>
+    <h2>Re-exporting the movable object</h2>
+    <figure>
+      <img src="images/a7_d3d_3_reexport_torus.png" alt="Checklist test: a green torus made in Maya was exported over sphere" width="532">
+      <figcaption>Checklist test: a green torus made in Maya was exported over sphere.mesh, the solution was built and the game run. The movable object is now the torus, with no code change (shown with SHIFT held; OpenGL looks the same). sphere.mesh was restored afterwards.</figcaption>
+    </figure>
+    <h2>Vertex colors (optional challenge)</h2>
+    <ul>
+      <li>The vertex format gained <code>uint8_t r, g, b, a</code> (default 255). Direct3D's input layout has a second element, COLOR, as <code>DXGI_FORMAT_R8G8B8A8_UNORM</code>, and OpenGL has attribute location 1 with 4 normalized <code>GL_UNSIGNED_BYTE</code> values.</li>
+      <li>The vertex shader passes the color through. The standard fragment shader outputs it, and the animated color shader multiplies its color by it.</li>
+      <li>In the file a color is <code>color = { r, g, b, a }</code> with values in [0, 1], the way a person thinks about color. The loader converts each value to [0, 255] by rounding (<code>value * 255 + 0.5</code>) instead of truncating, so 1.0 becomes 255 and 0.5 becomes 128. Alpha is optional and defaults to 1. The whole color is optional and defaults to white, so the Assignment 06 meshes load unchanged (the triangle is still white).</li>
+      <li>The plug-in already provided the colors Maya stores per vertex, so painting them with Mesh Display &gt; Apply Color is all an artist has to do.</li>
+    </ul>
+    <h2>Notes</h2>
+    <ul>
+      <li>All four configurations (Debug/Release, x64/x86) build with no errors and no warnings, and Direct3D and OpenGL render the same picture.</li>
+      <li>I used Maya 2024, the version I could install. Its installation already contains the devkit's include and lib folders, so DEVKIT_LOCATION points at the Maya install folder, with the trailing slash. Nothing in the project is hard-coded.</li>
+      <li>ExampleGame is unchanged and still runs.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
