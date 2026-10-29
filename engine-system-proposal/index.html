@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine System Proposal – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Engine System Proposal: Collision</h1>
+    <p class="subtitle">Box and sphere colliders defined in data files, enter / stay / exit events, solid objects that stop each other, and raycasts</p>
+
+
+    <h2>The idea</h2>
+    <p>My Engine System will be a <strong>collision system</strong>: a static library that knows where the solid parts of a game are and tells the game when they touch. Almost every final project game needs this, and it is something we haven't built yet: so far our objects pass straight through each other and through the floor.</p>
+    <p>From the point of view of a classmate making a game with it:</p>
+    <ul>
+      <li><strong>Give an object a collider by writing a small data file</strong> (a sphere or a box, which layer it is in, and whether it is solid, a trigger, or static) and loading it next to the object's mesh.</li>
+      <li><strong>Walls and floors stop things.</strong> A solid object that moves into a static one is pushed back out and its velocity into the surface is removed, so the player can walk on a floor, stand on a box and stop at a wall without any extra code.</li>
+      <li><strong>The game is told what happened.</strong> Each collider can have <code>OnEnter</code>, <code>OnStay</code> and <code>OnExit</code> functions (for example a lambda) that are called when it starts touching, keeps touching or stops touching another collider.</li>
+      <li><strong>Triggers</strong> report overlaps but never push anything: pickups, checkpoints, the goal, damage zones.</li>
+      <li><strong>Layers decide what touches what.</strong> One data file lists the game's layers and which pairs interact (the player touches enemies and pickups, enemies don't collect pickups, and so on), so there is no special-case code in the game.</li>
+      <li><strong>Raycasts</strong> answer "what is in this direction, and how far away?": shooting, line of sight, and checking whether the player is on the ground before a jump.</li>
+    </ul>
+    <p>What it deliberately is <strong>not</strong>: a physics engine. It doesn't add gravity, forces, bouncing or rotation. Objects keep moving with the engine's existing <code>sRigidBodyState</code> (a game that wants gravity sets an acceleration, as we already can), and the collision system only detects contacts and keeps solid objects apart. This keeps the scope realistic and keeps the library easy to drop into any of our games.</p>
+    <figure>
+      <img src="images/es_pipeline.png" alt="How the pieces fit together, following the same pattern as the meshes in Assignments 06-08: human-readable files are checked and converted at build time, and the game only loads small binary files" width="900">
+      <figcaption>How the pieces fit together, following the same pattern as the meshes in Assignments 06-08: human-readable files are checked and converted at build time, and the game only loads small binary files.</figcaption>
+    </figure>
+    <h2>Features</h2>
+    <p>What I expect to finish (the requirements I am holding myself to):</p>
+    <ul>
+      <li>Two shapes: <strong>spheres and axis-aligned boxes</strong> (boxes don't rotate with their object; see the stretch goals), with an optional offset from the object's position.</li>
+      <li><strong>Human-readable Lua files</strong> for colliders and for the layer table, and a <strong>ColliderBuilder</strong> that checks them (unknown layer names, negative sizes, a box without a size...) and writes small binary files. Mistakes are reported in Visual Studio's Error List with the file, and with the line number when Lua knows it, exactly like the MeshBuilder.</li>
+      <li><strong>Detection</strong> between every pair of enabled colliders whose layers interact: sphere-sphere, sphere-box and box-box, each giving a contact normal and a penetration depth.</li>
+      <li><strong>Events</strong> with enter / stay / exit tracking between updates, including an exit when a collider is disabled or destroyed while it is touching something.</li>
+      <li><strong>Solid response</strong>: a dynamic collider is pushed out of a static one along the contact normal (two dynamic colliders are pushed apart equally), and the part of its velocity that points into the surface is removed. Triggers never push.</li>
+      <li><strong>Raycasts</strong> against spheres and boxes, filtered by a layer mask, returning the closest hit (collider, point, normal, distance).</li>
+      <li><strong>Documentation for users</strong>: a short guide covering setup, both file formats with every field, what to add to AssetBuildFunctions.lua and AssetsToBuild.lua, and how to use the interface, plus comments in every public header.</li>
+    </ul>
+    <h2>How someone would use it</h2>
+    <p><strong>1. Set up the solution.</strong> Add the Collision static library and the ColliderBuilder tool to the solution, add a reference from the game project to Collision, and make BuildMyGameAssets depend on ColliderBuilder (the same way it depends on MeshBuilder). The library has no dependencies beyond the engine projects we all have (Math, Physics, Platform, Results, Logging...).</p>
+    <p><strong>2. Describe the layers.</strong> One file per game lists the layers and which of them interact:</p>
+<pre><code>-- MyGame_/Content/Collision/game.layers
+return
+{
+	-- Every collider belongs to one of these layers (at most 32)
+	layers = { "world", "player", "enemy", "pickup" },
+
+	-- The pairs of layers that touch each other;
+	-- colliders in any pair of layers that isn't listed pass through each other without events
+	interactions =
+	{
+		{ "player", "world" },
+		{ "player", "enemy" },
+		{ "player", "pickup" },
+		{ "enemy", "world" },
+	},
+}</code></pre>
+    <p><strong>3. Write a collider file for each kind of object.</strong> Only <code>shape</code>, its size and <code>layer</code> are required:</p>
+<pre><code>-- MyGame_/Content/Colliders/player.collider
+return
+{
+	shape = "sphere",
+	radius = 0.5,
+	layer = "player",
+	-- Optional values (shown with their defaults):
+	-- center = { x = 0.0, y = 0.0, z = 0.0 },	-- offset from the object's position
+	-- isTrigger = false,	-- true: report overlaps, but never push anything
+	-- isStatic = false,	-- true: never moves and is never pushed (walls, floors)
+}</code></pre>
+<pre><code>-- MyGame_/Content/Colliders/floor.collider
+return
+{
+	shape = "box",
+	halfSize = { x = 4.0, y = 0.05, z = 4.0 },
+	center = { x = 0.0, y = -0.05, z = 0.0 },	-- so the top of the box is at the object's position
+	layer = "world",
+	isStatic = true,
+}</code></pre>
+    <p><strong>4. Tell the asset build about the files.</strong> This is what the user guide will tell people to add:</p>
+<pre><code>-- AssetBuildFunctions.lua (copy once; ColliderBuilder.exe builds both kinds of file)
+NewAssetTypeInfo( "collisionlayers",
+	{
+		ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+			-- Collision/game.layers -&gt; Collision/game.binlayers
+			return ( i_sourceRelativePath:gsub( "%.layers$", ".binlayers" ) )
+		end,
+		GetBuilderRelativePath = function() return "ColliderBuilder.exe" end,
+	}
+)
+NewAssetTypeInfo( "colliders",
+	{
+		ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+			-- Colliders/player.collider -&gt; Colliders/player.bincollider
+			return ( i_sourceRelativePath:gsub( "%.collider$", ".bincollider" ) )
+		end,
+		GetBuilderRelativePath = function() return "ColliderBuilder.exe" end,
+		-- Layer names are checked against the layers file, so colliders are rebuilt whenever it changes
+		ShouldTargetBeBuilt = function( i_lastWriteTime_builtAsset )
+			return GetLastWriteTime( GameSourceContentDir .. "Collision/game.layers" ) &gt; i_lastWriteTime_builtAsset
+		end,
+	}
+)
+
+-- AssetsToBuild.lua (list your own files)
+	collisionlayers = { "Collision/game.layers" },
+	colliders = { "Colliders/player.collider", "Colliders/floor.collider", "Colliders/coin.collider" },</code></pre>
+    <p><strong>5. Use it in the game.</strong> The public interface (everything platform-independent; the exact names may still change while I build it):</p>
+<pre><code>namespace eae6320
+{
+	namespace Collision
+	{
+		// Call from your game's Initialize() and CleanUp()
+		cResult Initialize( const char* const i_path_layers );	// e.g. "data/Collision/game.binlayers"
+		cResult CleanUp();
+
+		// Call once per simulation update, after your objects have moved:
+		// it pushes solid objects apart and then calls the event functions
+		void Update();
+
+		// What an event tells you
+		struct sContact
+		{
+			cCollider* other;	// The collider that was touched
+			Math::sVector normal;	// Points from the other collider toward this one
+			float penetrationDepth;	// How far they overlapped before they were pushed apart
+		};
+
+		class cCollider
+		{
+		public:
+			// Loads a built collider file and attaches it to a rigid body that your game object owns:
+			// the collider reads its position from it, and if the collider is solid and not static
+			// it moves the rigid body out of whatever it hits and stops its velocity into the surface
+			static cResult Load( const char* const i_path, Physics::sRigidBodyState&amp; io_rigidBody, cCollider*&amp; o_collider );
+			// (reference counted like cMesh: DecrementReferenceCount() removes it from the world)
+
+			// Any of these can be left empty
+			std::function&lt;void( const sContact&amp; )&gt; OnEnter, OnStay, OnExit;
+			// Lets you find your own object from inside an event
+			void* userData = nullptr;
+
+			void SetEnabled( const bool i_isEnabled );	// A disabled collider is ignored (and its touches end)
+			bool IsTrigger() const;
+			uint8_t GetLayer() const;
+		};
+
+		// Queries
+		struct sRaycastHit { cCollider* collider; Math::sVector point, normal; float distance; };
+		bool Raycast( const Math::sVector&amp; i_origin, const Math::sVector&amp; i_direction, const float i_maxDistance,
+			sRaycastHit&amp; o_hit, const uint32_t i_layerMask = ~0u );
+		uint32_t GetLayerMask( const char* const i_layerName );	// e.g. to raycast only against "world"
+	}
+}</code></pre>
+    <p>And a typical use in a game:</p>
+<pre><code>// cMyGame::Initialize()
+Collision::Initialize( "data/Collision/game.binlayers" );
+Collision::cCollider::Load( "data/Colliders/player.bincollider", m_player.rigidBodyState, m_player.collider );
+Collision::cCollider::Load( "data/Colliders/floor.bincollider", m_floor.rigidBodyState, m_floor.collider );
+Collision::cCollider::Load( "data/Colliders/coin.bincollider", m_coin.rigidBodyState, m_coin.collider );	// a trigger
+m_coin.collider-&gt;userData = &amp;m_coin;
+m_player.collider-&gt;OnEnter = [this]( const Collision::sContact&amp; i_contact )
+{
+	if ( i_contact.other-&gt;userData == &amp;m_coin )
+	{
+		m_score += 1;
+		m_coin.collider-&gt;SetEnabled( false );	// (and stop drawing it)
+	}
+};
+
+// cMyGame::UpdateSimulationBasedOnTime()
+m_player.rigidBodyState.Update( i_elapsedSecondCount_sinceLastUpdate );	// move everything as usual...
+Collision::Update();	// ...then let the collision system fix overlaps and send the events
+
+// Is the player standing on something? (e.g. before allowing a jump)
+Collision::sRaycastHit hit;
+const bool isOnGround = Collision::Raycast( m_player.rigidBodyState.position, Math::sVector( 0.0f, -1.0f, 0.0f ), 0.55f,
+	hit, Collision::GetLayerMask( "world" ) );</code></pre>
+    <h2>What I expect to implement</h2>
+    <ul>
+      <li><strong>Collision</strong> (Engine/Collision, a static library): loading built files with <code>Platform::LoadBinaryFile()</code> (four-or-so extractions, no loops, like the meshes), the list of live colliders, the narrow-phase tests (sphere-sphere, closest point on a box for sphere-box, smallest-overlap axis for box-box), the push-out and velocity correction, pair tracking for enter / stay / exit, and the ray tests (quadratic for spheres, the slab method for boxes).</li>
+      <li><strong>ColliderBuilder</strong> (Tools/ColliderBuilder): reads both kinds of Lua file at build time, validates them, turns layer names into indices and the interaction list into one 32-bit mask per layer, and writes the binary files. At run-time two colliders can touch only if bit <code>b</code> of <code>mask[a]</code> is set, which is one AND per pair.</li>
+      <li><strong>A demo in MyGame</strong>: the floor and some walls and boxes become static colliders, the player sphere can move and stand on them, a coin trigger is collected, and a raycast checks whether the player is on the ground. It doubles as the example in the user guide.</li>
+      <li><strong>Platform independence</strong>: the public headers only use the engine's math and physics types and standard C++. The collision math itself has no platform-specific parts, so I don't expect to need a <code>.win.cpp</code> file; if something platform-specific does come up it will go into one, following the Concurrency library's pattern, and never into a header. The binary files are built per platform by the builder, like every other asset.</li>
+    </ul>
+    <table>
+      <thead><tr><th>Milestone</th><th>Date</th><th>Plan</th></tr></thead>
+      <tbody>
+        <tr><td>Update #1</td><td>Nov 3</td><td>Collision library and ColliderBuilder projects; both file formats with build-time errors; loading; overlap tests for all shape pairs; enter / stay / exit events printed to the log in MyGame.</td></tr>
+        <tr><td>Update #2</td><td>Nov 10</td><td>Solid response and velocity correction; triggers; layer table; raycasts; the MyGame demo; first version of the user guide.</td></tr>
+        <tr><td>Presentation / write-up</td><td>Nov 16 / Nov 19</td><td>Support for anyone who has started using it, polish and documentation, then stretch goals as time allows.</td></tr>
+      </tbody>
+    </table>
+    <h2>Challenges I expect</h2>
+    <ul>
+      <li><strong>Our rendering extrapolates.</strong> The game draws objects where they will be a fraction of a frame later (<code>PredictFutureTransform()</code>). If the collision system only fixed the position, an object that is still moving into a wall would be drawn sinking into it every frame. That is why the response also removes the velocity into the surface.</li>
+      <li><strong>Changing things from inside an event.</strong> Collecting a coin usually means disabling or destroying its collider inside an event, while the system is still walking its list of contacts. Changes made during events will be queued and applied after all of them have been sent.</li>
+      <li><strong>Enter and exit bookkeeping.</strong> Exit events have to be sent for touches that end because a collider was disabled or released, not only because objects moved apart, and nothing may refer to a collider after it is gone.</li>
+      <li><strong>Lifetime of the rigid body.</strong> A collider keeps a pointer to its game object's <code>sRigidBodyState</code>, so the object must not move in memory (for example inside a std::vector that grows). This has to be obvious in the documentation and caught by asserts where possible.</li>
+      <li><strong>Tunneling.</strong> Detection runs once per simulation update, so a small, fast object can jump through a thin wall between two updates. I will document the limit (roughly: an object shouldn't move more than its own size per update). Fixing it properly is a stretch goal.</li>
+      <li><strong>A build-time dependency between files.</strong> Collider files use layer names that are defined in another file, so colliders have to be rebuilt when the layers file changes. That is what the <code>ShouldTargetBeBuilt()</code> override above does, the same way shaders are rebuilt when shaders.inc changes.</li>
+    </ul>
+    <h2>Stretch goals</h2>
+    <ul>
+      <li><strong>Oriented boxes</strong> that rotate with their object (separating axis test).</li>
+      <li><strong>Capsules</strong>, the usual shape for characters.</li>
+      <li><strong>A broad phase</strong> (a uniform grid or sort-and-sweep) so that hundreds of colliders don't need every pair tested, with measurements of the difference.</li>
+      <li><strong>Swept spheres</strong> for fast projectiles, to stop tunneling.</li>
+      <li><strong>Bounciness and friction</strong> values in the collider file.</li>
+      <li><strong>A debug view</strong> that shows colliders by drawing the existing box and sphere meshes at their positions, using only graphics features we already have.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
