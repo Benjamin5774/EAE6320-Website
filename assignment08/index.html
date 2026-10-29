@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assignment 08 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Assignment 08</h1>
+    <p class="subtitle">Binary geometry: the MeshBuilder turns the human-readable mesh files into binary files that the game loads with almost no work</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_Assignment08_Direct3D_x64.zip">⬇ Download the game (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_Assignment08_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game. Arrow keys move the sphere, hold <kbd>SPACE</kbd> to give it the triangle mesh, hold <kbd>SHIFT</kbd> to draw it with the plain vertex-color effect. <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> move the camera and <kbd>Q</kbd>/<kbd>E</kbd> turn it.</small>
+    </div>
+
+    <h2>Screenshots</h2>
+    <figure>
+      <img src="images/a8_d3d_1_default.png" alt="The game (Direct3D, x64)" width="532">
+      <figcaption>The game (Direct3D, x64). It looks exactly like Assignment 07, which is the point: the floor, the sphere and the coil are now loaded from binary files (data/Meshes/*.binmesh) built by the MeshBuilder, and the game no longer reads Lua at all.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a8_gl_1_default.png" alt="The OpenGL (x86) build, identical to Direct3D" width="532">
+      <figcaption>The OpenGL (x86) build, identical to Direct3D. (I also checked both platforms with back-face culling temporarily turned on to make sure that every triangle still faces the right way after the winding change described below.)</figcaption>
+    </figure>
+    <h2>What changed</h2>
+    <ul>
+      <li><strong>Reading the human-readable file moved from the game to the MeshBuilder.</strong> The Lua code is in its own file, <code>Tools/MeshBuilder/HumanReadableMesh.cpp</code>: it takes the path of a source .mesh file and gives back two std::vectors (the vertices and the indices), so the code that writes the binary file doesn't know or care that the source was Lua. Instead of logging and asserting, every problem is reported with <code>OutputErrorMessageWithFileInfo()</code>, and when Lua knows the line number (a syntax error, or a typo like <code>sdf</code>) it is passed on, so the Error List shows the file and line. The MeshBuilder now references LuaLib, and the Graphics project no longer does.</li>
+      <li><strong>The MeshBuilder writes a binary file</strong> with exactly four writes (below).</li>
+      <li><strong>The game loads the binary file</strong> with <code>Platform::LoadBinaryFile()</code> and finds the four pieces with four pointer calculations. There is no loop anywhere in the mesh loading or initialization code (also the Direct3D index-swapping loop is gone; see the platform section).</li>
+      <li><strong>Built meshes have their own extension (optional challenge).</strong> The mesh asset type in AssetBuildFunctions.lua overrides <code>ConvertSourceRelativePathToBuiltRelativePath()</code> so that <code>Meshes/floor.mesh</code> is built to <code>data/Meshes/floor.binmesh</code>. Now a path alone says whether it is a source file that people edit or a built file that only the game reads.</li>
+    </ul>
+<pre><code>// cMeshBuilder.cpp: exactly one write for each of the four pieces of data
+// (each array is written as one block, never vertex by vertex or index by index)
+const auto vertexCount = static_cast&lt;uint32_t&gt;( i_vertices.size() );
+const auto indexCount = static_cast&lt;uint32_t&gt;( i_indices.size() );
+fout.write( reinterpret_cast&lt;const char*&gt;( &amp;vertexCount ), sizeof( vertexCount ) );
+fout.write( reinterpret_cast&lt;const char*&gt;( &amp;indexCount ), sizeof( indexCount ) );
+fout.write( reinterpret_cast&lt;const char*&gt;( i_vertices.data() ), sizeof( i_vertices[0] ) * vertexCount );
+fout.write( reinterpret_cast&lt;const char*&gt;( i_indices.data() ), sizeof( i_indices[0] ) * indexCount );</code></pre>
+    <h2>A binary mesh file</h2>
+    <figure>
+      <img src="images/a8_hex_floor_gl.png" alt="The floor (a plane: 4 vertices, 2 triangles) built for OpenGL, shown as a hex dump with each of the four pieces of data in its own color" width="900">
+      <figcaption>The floor (a plane: 4 vertices, 2 triangles) built for OpenGL, shown as a hex dump with each of the four pieces of data in its own color. Every vertex and every triangle is outlined so that they can be counted. The file is 84 bytes: 4 + 4 + 4 x 16 + 6 x 2.</figcaption>
+    </figure>
+    <p>How to read it (everything is little-endian, so the lowest byte comes first):</p>
+    <ul>
+      <li><strong>Red, bytes 0-3: the number of vertices</strong> as a uint32_t: <code>04 00 00 00</code> = 4.</li>
+      <li><strong>Orange, bytes 4-7: the number of indices</strong> as a uint32_t: <code>06 00 00 00</code> = 6 (two triangles).</li>
+      <li><strong>Blue, bytes 8-71: the vertices,</strong> 16 bytes each, exactly the in-memory layout of <code>sVertex_mesh</code>: three floats for the position and four bytes for the color. In the first vertex, <code>00 00 80 C0</code> is the float -4.0, <code>00 00 00 00</code> is 0.0, <code>00 00 80 40</code> is 4.0, and <code>1A 4D E6 FF</code> is the color (26, 77, 230, 255), which is the (0.1, 0.3, 0.9, 1) from the source file converted to bytes with rounding.</li>
+      <li><strong>Green, bytes 72-83: the indices,</strong> 2 bytes each: <code>00 00 01 00 02 00</code> is the triangle {0, 1, 2} and <code>02 00 01 00 03 00</code> is {2, 1, 3}.</li>
+    </ul>
+    <p><strong>Why this order.</strong> The counts have to come before the arrays: the game can't know where the vertex array ends and the index array begins, or check that the file is complete, until it knows how many there are. That is the one real dependency. Putting both counts first means that one small fixed-size header (8 bytes) describes the whole file, and everything after it can be found by arithmetic. The vertex count comes before the index count simply because the vertices come before the indices.</p>
+    <p>The arrays are in order of decreasing alignment, which takes care of the alignment optional challenge without any padding. The file is loaded into <code>malloc()</code>ed memory, so it starts aligned for anything. The vertices need 4-byte alignment (floats) and start at offset 8. The indices need 2-byte alignment and start at 8 + 16 x vertexCount, which is always even. Two <code>static_assert</code>s in the MeshBuilder (using <code>alignof</code>) will fail the build if a future change to the vertex struct ever breaks this, at which point padding would be needed.</p>
+    <p><strong>Why the counts are 32 bits.</strong> A uint16_t would save 4 bytes, but it can't hold either number. 16-bit indices can refer to 65536 different vertices (0 to 65535), and 65536 doesn't fit in a uint16_t. The number of indices isn't limited by 16-bit indices at all: the helix I measured below has 65,312 vertices but 98,004 indices. Using explicit sizes (uint32_t, uint16_t) on both the writing and the reading side is what makes the file mean the same thing to both.</p>
+    <h2>Same file on both platforms?</h2>
+    <p>No, but the only difference is the order of the indices, and only because I chose to fix the winding order at build time.</p>
+    <figure>
+      <img src="images/a8_hex_floor_d3d.png" alt="The same floor built for Direct3D" width="900">
+      <figcaption>The same floor built for Direct3D. The counts and the vertices are byte-for-byte identical. The triangles are {0, 2, 1} and {2, 3, 1}: the second and third index of every triangle are swapped.</figcaption>
+    </figure>
+    <p>My source files list triangles counter-clockwise (the engine's right-handed convention), but Direct3D treats clockwise triangles as front-facing. Until now cMesh.d3d.cpp made a swapped copy of the indices every time a mesh was loaded. Now the MeshBuilder does the swap once, when it builds a mesh for Direct3D (the MeshBuilder is compiled for each platform, so it can use <code>#if defined( EAE6320_PLATFORM_D3D )</code> just like the engine). The built file is already in the platform's order, and the run-time hands the indices to the graphics API exactly as they were loaded. This is the kind of work that belongs at build time: it's done once on the developer's machine instead of on every load on every player's machine, and it removed the last loop from the run-time mesh code.</p>
+    <p>Everything else is identical, and should be. Both platforms use the same <code>sVertex_mesh</code> struct (12 bytes of floats plus 4 color bytes, no padding). Both builds run on little-endian x86/x64 CPUs where float, uint32_t and uint16_t have the same size and byte order. The 32-bit OpenGL build and the 64-bit Direct3D build don't disagree about anything in the file, because it contains only explicitly sized numbers, with no pointers and no size_t. If the engine ever supported a big-endian platform or a different vertex format per platform, the MeshBuilder would be the place to produce a different file for it.</p>
+    <h2>Extracting the data at run-time</h2>
+    <p>This is the important part of <code>cMesh::Load()</code>. Four extractions, no loops, and no copies: the vertex and index pointers point straight into the loaded block, which is passed to the platform-specific <code>Initialize()</code>.</p>
+<pre><code>// cMesh.cpp: the whole built file is loaded as one block of memory...
+Platform::sDataFromFile dataFromFile;
+Platform::LoadBinaryFile( i_path, dataFromFile, &amp;errorMessage );
+auto currentOffset = reinterpret_cast&lt;uintptr_t&gt;( dataFromFile.data );
+const auto finalOffset = currentOffset + dataFromFile.size;
+
+// ...and the four pieces are found in it, in the order they were written
+// 1. The number of vertices
+const auto vertexCount = *reinterpret_cast&lt;const uint32_t*&gt;( currentOffset );
+currentOffset += sizeof( vertexCount );
+// 2. The number of indices
+const auto indexCount = *reinterpret_cast&lt;const uint32_t*&gt;( currentOffset );
+currentOffset += sizeof( indexCount );
+// 3. The vertices (used where they are; nothing is copied)
+const auto* const vertexData = reinterpret_cast&lt;const VertexFormats::sVertex_mesh*&gt;( currentOffset );
+currentOffset += sizeof( vertexData[0] ) * vertexCount;
+// 4. The indices
+const auto* const indexData = reinterpret_cast&lt;const uint16_t*&gt;( currentOffset );
+
+newMesh-&gt;Initialize( vertexData, vertexCount, indexData, indexCount );
+// (dataFromFile frees the memory when Load() returns; the graphics API has made its own copy)</code></pre>
+    <p>The real code also checks the data before it trusts the counts. A truncated or corrupt file therefore gives a clear error message and the game exits, instead of reading past the end of the buffer:</p>
+<pre><code>// Between steps 2 and 3: the rest of the file must be exactly the two arrays the counts describe
+const auto arraysSize = ( static_cast&lt;uint64_t&gt;( vertexCount ) * sizeof( VertexFormats::sVertex_mesh ) )
+	+ ( static_cast&lt;uint64_t&gt;( indexCount ) * sizeof( uint16_t ) );
+if ( ( vertexCount == 0 ) || ( vertexCount &gt; 65536 ) || ( indexCount == 0 ) || ( ( indexCount % 3 ) != 0 )
+	|| ( arraysSize != ( finalOffset - currentOffset ) ) )
+{
+	// "The mesh file "data/Meshes/floor.binmesh" is invalid: it says it has 4 vertices and 6 indices,
+	//  but its size (50 bytes) doesn't match"
+	Logging::OutputError( ... );
+	return Results::InvalidFile;
+}</code></pre>
+    <h2>Why binary at run-time and human-readable in source control</h2>
+    <p>The two advantages of the binary format:</p>
+    <ul>
+      <li><strong>It is much smaller.</strong> A vertex is 16 bytes in the binary file, the same as in memory, but the same vertex as text (<code>position = { x = 0.49391, y = -0.780615, z = 1.33821e-09 }, color = { r = 1, g = 0.1, b = 0.9, a = 1 }</code>) is over 100 characters. Smaller files take less disk space, download faster, and take less time to read.</li>
+      <li><strong>It is much faster to load.</strong> Nothing has to be parsed. The bytes on disk are already the bytes that the GPU wants, so loading is one file read plus a few pointer additions. The human-readable file has to be tokenized by Lua, every number converted from decimal text to a float, a Lua table created for every vertex, position, color and triangle, and then my code has to walk all of those tables.</li>
+    </ul>
+    <p>Other benefits follow from the same idea. All the error checking of the source data (missing values, indices out of range, too many vertices) now happens once at build time, where the error can point at the file and line, instead of on every load. The game no longer needs the Lua library to load meshes at all.</p>
+    <p>The human-readable format has the opposite strengths, and they are the ones that matter for the files people work with. It can be read, reviewed and edited in any text editor. A change shows up as a meaningful line-by-line diff and two people's changes can be merged, while a binary file is an opaque blob to git. It is forgiving (named keys, comments, optional values with defaults), so it survives changes to the engine: when I added color in Assignment 07 the older meshes still worked. The binary file is the opposite: it is exactly one struct layout, and any change to <code>sVertex_mesh</code> makes every existing binary file wrong.</p>
+    <p>That is why each format is used where it is. The source files in source control are what people create, read, merge and keep for years, so they should be human-readable and robust to change. The built files are generated from them automatically by the build (they live in temp/ and are never committed), so it costs nothing that they are unreadable and tied to the current code: when the format changes, they are simply rebuilt. The player only ever sees the built files, and the player benefits from small files and fast loading.</p>
+    <h2>Measuring the difference</h2>
+    <p>For the measurement I made a helix in Maya with as many vertices as 16-bit indices allow (4 coils, 16 axis subdivisions, 255 subdivisions per coil, which my exporter turns into <strong>65,312 vertices and 32,668 triangles (98,004 indices)</strong>) and exported it with my plug-in. It was only used for the measurements and isn't in the repository.</p>
+    <figure>
+      <img src="images/a8_size_speed_chart.png" alt="Size on disk and load time of the same helix in each format" width="900">
+      <figcaption>Size on disk and load time of the same helix in each format. The binary bar in the load-time chart is too short to see at this scale.</figcaption>
+    </figure>
+    <table>
+      <thead><tr><th>Format of the same helix</th><th>Size on disk</th><th>Load + extract time</th><th>Compared with binary</th></tr></thead>
+      <tbody>
+        <tr><td>Human-readable, as exported (with normals, tangents, bitangents, UVs)</td><td>24,332,315 bytes (24.3 MB)</td><td>654 ms</td><td>19.6x bigger, 1265x slower</td></tr>
+        <tr><td>Human-readable, position + color only</td><td>9,518,674 bytes (9.5 MB)</td><td>235 ms</td><td>7.7x bigger, 454x slower</td></tr>
+        <tr><td>Binary (.binmesh)</td><td>1,241,008 bytes (1.24 MB)</td><td>0.52 ms</td><td></td></tr>
+      </tbody>
+    </table>
+    <p>How I measured: the timing code was temporary and has been removed (it is not in the commit), and all times are from Release x64 builds. In the MeshBuilder I started timing right before the Lua file was loaded and stopped right before the binary file was written, so it includes extracting the data from the Lua tables, and printed the result (it shows in Visual Studio's Output window while the assets build). I ran MeshBuilder.exe on the helix 7 times. In the game I started timing right before <code>LoadBinaryFile()</code> and stopped right before <code>Initialize()</code>, and logged the result. I started the game by itself 7 times, without a debugger. The numbers are the medians.</p>
+    <p>Because my exporter also writes normals, tangents, bitangents and texture coordinates, I also measured a copy of the file with only the position and color, the data that the binary file actually contains. That is the fair comparison of the formats themselves. The human-readable file is still 7.7 times bigger and 454 times slower to load. The full exported file is 20 times bigger and over 1000 times slower.</p>
+    <p>What this means in practice: two thirds of a second for one mesh is already noticeable, and a real level has hundreds of meshes, so with the human-readable format loading would take minutes instead of a fraction of a second. The binary load is limited only by reading 1.2 MB from disk. The files were in Windows' file cache when I measured, so a cold read from a hard drive would make the 20x size difference matter even more.</p>
+    <h2>Checklist: a typo in a mesh file</h2>
+    <p>I added a line with <code>sdf</code> inside the vertices table of square.mesh and built BuildMyGameAssets. The build fails, and the error appears in Visual Studio's Error List with the mesh file and the line number. Going to the error opens square.mesh at that line. (Lua reports line 21 rather than 20 because <code>sdf { ... }</code> is a function call that continues onto the next line.) A syntax error such as <code>sdf sdf</code> is reported the same way, at line 20, with Lua's message "'}' expected (to close '{' at line 18) near 'sdf'". The file was restored afterwards.</p>
+    <figure>
+      <img src="images/a8_checklist_error_list_crop.png" alt="The Error List after building the assets with the typo: the first error names square" width="900">
+      <figcaption>The Error List after building the assets with the typo: the first error names square.mesh, line 21.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/a8_checklist_error_opened_crop.png" alt="Going to the error opens square" width="900">
+      <figcaption>Going to the error opens square.mesh with the cursor on line 21, below the sdf line.</figcaption>
+    </figure>
+    <h2>Notes</h2>
+    <ul>
+      <li>All four configurations (Debug/Release, x64/x86) build from an empty temp/ folder with no errors and no warnings. The TA scenario works: building only the game and running it shows the "Initialization failed" message box and exits with code 1, and after building BuildMyGameAssets the game runs.</li>
+      <li>The meshes in the game are the ones from Assignment 07, so the optional challenge of a recognizable mesh isn't done, and neither is 32-bit index support. The two optional challenges I did are the .binmesh extension and the padding-free alignment described above.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
