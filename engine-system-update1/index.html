@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine System Update #1 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Engine System Update #1: Collision</h1>
+    <p class="subtitle">The Collision library and ColliderBuilder work: both data formats with build-time errors, small binary files, overlap tests for every pair of shapes, and enter / stay / exit events in MyGame</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_EngineSystemUpdate1_Direct3D_x64.zip">⬇ Download the demo (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_EngineSystemUpdate1_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game. The arrow keys move the orange sphere (the player); <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> move the camera and <kbd>Q</kbd>/<kbd>E</kbd> turn it. Anything that is touching another collider is drawn red, and every touch that starts or ends is written to <code>eae6320.log</code> next to the exe.</small>
+    </div>
+
+    <h2>Where the project is</h2>
+    <p>My Engine System is a collision system: colliders (spheres and axis-aligned boxes) described in data files and attached to game objects, collision layers that decide what can touch what, and events that tell the game when two colliders start touching, keep touching and stop touching. Next week it will also push solid objects apart and answer raycasts. This is what I planned for this first update in my proposal, and what is done:</p>
+    <table>
+      <thead><tr><th>Planned for Update #1</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Collision library and ColliderBuilder projects</td><td>Done. Engine/Collision is a static library and Tools/ColliderBuilder a builder; MyGame references Collision and BuildMyGameAssets depends on ColliderBuilder.</td></tr>
+        <tr><td>Both file formats with build-time errors</td><td>Done. A layers file and a collider file (Lua). Every mistake I could think of is reported in Visual Studio's Error List with the file and the line.</td></tr>
+        <tr><td>Loading</td><td>Done. A built collider is one 32-byte struct; the layers file is four pieces. Both are checked when they are loaded.</td></tr>
+        <tr><td>Overlap tests for all shape pairs</td><td>Done. Sphere-sphere, sphere-box and box-box, each with a contact normal and penetration depth (12 unit tests).</td></tr>
+        <tr><td>Enter / stay / exit events printed to the log in MyGame</td><td>Done. Every object in MyGame has a collider; touches are logged and touching objects are drawn red.</td></tr>
+      </tbody>
+    </table>
+    <p>A few things that I had planned for next week are already in, because they turned out to be small once the rest existed: the layer table is used at run time (colliders whose layers don't interact are never tested), static colliders are never tested against each other, colliders can be disabled and enabled, and it is safe to release a collider from inside an event.</p>
+    <figure>
+      <img src="images/es_pipeline.png" alt="How the pieces fit together (the diagram from my proposal)" width="900">
+      <figcaption>How the pieces fit together (the diagram from my proposal). Everything in it now exists except pushing solid objects apart and Raycast(), which are next week's work.</figcaption>
+    </figure>
+    <h2>The demo</h2>
+    <figure>
+      <img src="images/es1_d3d_scene.png" alt="MyGame (Direct3D, x64) at the start" width="900">
+      <figcaption>MyGame (Direct3D, x64) at the start. Every object has a collider: the orange player (layer "player"), the violet patroller that moves back and forth by itself ("enemy"), the spinning coil (a static trigger in "pickup"), and the crate and the floor (both static, in "world"). Nothing is touching anything, so nothing is red.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es1_d3d_patroller_crate.png" alt="The patroller passing through the crate" width="900">
+      <figcaption>The patroller passing through the crate. Both get OnEnter, then OnStay every update, and OnExit when the patroller comes out the other side. The game counts touches in those functions and draws an object red while its count isn't zero. They pass through each other because pushing solid objects apart is next week's work.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es1_d3d_patroller_spinner.png" alt="The patroller inside the coil's trigger box" width="900">
+      <figcaption>The patroller inside the coil's trigger box. Nothing turns red and nothing is logged: game.layers doesn't pair "enemy" with "pickup", so these two colliders are never even tested.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es1_d3d_player_crate_floor.png" alt="The player moved down onto the floor and then right against the crate (the camera had moved a little): it touches two colliders at once, so it, the floor and the crate are red" width="900">
+      <figcaption>The player moved down onto the floor and then right against the crate (the camera had moved a little): it touches two colliders at once, so it, the floor and the crate are red. The crate also overlaps the floor, but both are static and static pairs are skipped, so neither of them reports the other.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es1_gl_player_spinner.png" alt="The OpenGL (x86) build: the player inside the coil's trigger box" width="900">
+      <figcaption>The OpenGL (x86) build: the player inside the coil's trigger box. Both builds behave the same; the built collision files are byte-for-byte identical on both platforms.</figcaption>
+    </figure>
+    <p>This is the log from the run in the fourth screenshot. The system writes the layers when it starts, which helps when something doesn't collide. The rest is written by MyGame's event functions:</p>
+<pre><code>Collision: initialized with 4 layers from "data/Collision/game.binlayers"
+Collision:   layer 0 "world" touches: player, enemy
+Collision:   layer 1 "player" touches: world, enemy, pickup
+Collision:   layer 2 "enemy" touches: world, player
+Collision:   layer 3 "pickup" touches: player
+The application was successfully initialized
+Collision: patroller started touching crate (normal -1.00 +0.00 +0.00, depth 0.040)
+Collision: crate started touching patroller (normal +1.00 +0.00 +0.00, depth 0.040)
+Collision: patroller stopped touching crate (OnStay was called 24 times in between)
+Collision: crate stopped touching patroller (OnStay was called 24 times in between)
+Collision: player started touching floor (normal +0.00 +1.00 +0.00, depth 0.000)
+Collision: floor started touching player (normal +0.00 -1.00 +0.00, depth 0.000)
+Collision: player started touching crate (normal -1.00 +0.00 +0.00, depth 0.067)
+Collision: crate started touching player (normal +1.00 +0.00 +0.00, depth 0.067)</code></pre>
+    <p>The two sides of every pair get opposite normals, because a normal always points from the other collider toward the one being told. The depths are small because the objects move at most 0.13 units per simulation update (15 per second), and a touch is found in the first update in which they overlap. The floor's depth is 0: the player stopped exactly on top of it, and shapes that are within 0.001 units of each other count as touching, so an object resting on another doesn't flicker between touching and not touching because of floating point error.</p>
+    <h2>Using it from a game</h2>
+    <p>This is all the code a game needs (shortened from MyGame; in my game <code>sGameObject</code> has a <code>LoadCollider()</code> helper and every object gets the same event functions):</p>
+<pre><code>// cMyGame::Initialize(): the layers first, because every collider's layer is checked against them
+Collision::Initialize( "data/Collision/game.binlayers" );
+// A collider is attached to the rigid body of the object it belongs to, and follows it from then on
+Collision::cCollider::Load( "data/Colliders/player.bincollider", m_object_player.rigidBodyState, m_object_player.collider );
+// userData is how an event finds out which object the other collider belongs to
+m_object_player.collider-&gt;userData = &amp;m_object_player;
+m_object_player.collider-&gt;OnEnter = [this]( const Collision::sContact&amp; i_contact )
+{
+	++m_object_player.touchCount;	// (the object is drawn red while this isn't 0)
+	const auto* const other = static_cast&lt;const sGameObject*&gt;( i_contact.other-&gt;userData );
+	Logging::OutputMessage( "Collision: player started touching %s", other-&gt;name );
+};
+m_object_player.collider-&gt;OnExit = [this]( const Collision::sContact&amp; ) { --m_object_player.touchCount; };
+
+// cMyGame::UpdateSimulationBasedOnTime(): move everything as usual, then let the collision system look
+m_object_player.Update( i_elapsedSecondCount_sinceLastUpdate );
+m_object_patroller.Update( i_elapsedSecondCount_sinceLastUpdate );
+Collision::Update();	// &lt;- the events are sent from here
+
+// cMyGame::CleanUp(): release the colliders, then clean up the system
+m_object_player.collider-&gt;DecrementReferenceCount();
+Collision::CleanUp();</code></pre>
+    <p>A collider follows the rigid body that it was loaded with, so the game keeps moving objects exactly as before (velocity, acceleration, <code>sRigidBodyState::Update()</code>) and the collision system reads their positions when <code>Collision::Update()</code> runs. The one rule is that the rigid body must not move in memory while the collider exists (a member of the game is fine, an element of a std::vector that grows is not), and the header comments say so.</p>
+    <h2>The data</h2>
+    <h3>The layers file</h3>
+    <p>One file per game lists its layers (at most 32) and the pairs of layers that touch each other. Pairs go both ways, and a layer can be paired with itself (e.g. { "enemy", "enemy" } if enemies should bump into each other).</p>
+<pre><code>-- MyGame_/Content/Collision/game.layers
+return
+{
+	layers =
+	{
+		"world",	-- the floor and the crate (both static)
+		"player",	-- the sphere that the arrow keys move
+		"enemy",	-- the sphere that patrols back and forth on its own
+		"pickup",	-- the spinning coil (a trigger)
+	},
+
+	-- The pairs of layers that touch each other;
+	-- colliders in layers that aren't paired here pass through each other without any events
+	interactions =
+	{
+		{ "player", "world" },
+		{ "player", "enemy" },
+		{ "player", "pickup" },
+		{ "enemy", "world" },
+		-- (enemies don't collect pickups, so "enemy" and "pickup" aren't paired)
+	},
+}</code></pre>
+    <h3>Collider files</h3>
+    <p>One file for every kind of collider. Only <code>shape</code>, its size and <code>layer</code> are required. A sphere has a <code>radius</code>, a box has a <code>halfSize</code> (half of its size along each axis). <code>center</code> is an optional offset from the object's position, <code>isTrigger</code> marks a collider that will only report overlaps (it will never push anything once pushing exists), and <code>isStatic</code> marks one that never moves.</p>
+<pre><code>-- MyGame_/Content/Colliders/player.collider
+return
+{
+	shape = "sphere",
+	radius = 0.5,
+	layer = "player",
+}
+
+-- MyGame_/Content/Colliders/floor.collider
+return
+{
+	shape = "box",
+	halfSize = { x = 4.0, y = 0.05, z = 4.0 },
+	center = { y = -0.05 },	-- (any component that isn't written is 0)
+	layer = "world",
+	isStatic = true,
+}
+
+-- MyGame_/Content/Colliders/spinner.collider
+return
+{
+	shape = "box",
+	halfSize = { x = 0.55, y = 0.85, z = 0.55 },
+	layer = "pickup",
+	isTrigger = true,
+	isStatic = true,
+}</code></pre>
+    <h3>What ColliderBuilder checks</h3>
+    <p>ColliderBuilder reads both kinds of file with Lua and reports every problem with <code>OutputErrorMessageWithFileInfo()</code>, so a mistake fails the asset build and shows up in the Error List. These are the actual messages for broken files that I made to test it (paths shortened):</p>
+<pre><code>colliders/player.collider(16): error : The collider file has an unknown key "isTriger" (the valid keys are: "shape", "radius", "halfSize", "center", "layer", "isTrigger", "isStatic")
+colliders/player.collider(15): error : The layer "plaeyr" isn't in the game's layers file (Collision/game.layers); the layers are: "world", "player", "enemy", "pickup"
+negative.collider(4) : error : The "radius" must be a number greater than 0 (it is -1)
+spherehalf.collider(5) : error : A sphere doesn't have a "halfSize" (only a box does): remove it, or change the shape to "box"
+nohalf.collider(3) : error : A box must have a "halfSize" table (half of its size along each axis, e.g. { x = 1.0, y = 0.5, z = 1.0 }) instead of a nil
+capsule.collider(3) : error : The shape "capsule" isn't one that the collision system knows (use "sphere" or "box")
+centerkey.collider(5) : error : The "center" table has an unknown key "w" (the valid keys are: "x", "y", "z")
+flag.collider(6) : error : "isStatic" must be true or false (instead of a string)
+syntax.collider(5) : error : The collider file couldn't be loaded: '}' expected (to close '{' at line 3) near 'radius'
+unknown.layers(7) : error : Interaction 2 refers to the layer "wrold", which isn't in the "layers" table (the layers are: "world", "player")
+duplicate.layers(7) : error : The layer "world" is listed more than once</code></pre>
+    <p>Lua only knows the line number of a syntax error: a value in a table doesn't remember where it was written. To make double-clicking every error go to the right line anyway, the builder searches the file for the key (<code>radius =</code>) or the quoted name (<code>"plaeyr"</code>) that the error is about, ignoring comments, including <code>--[[ ]]</code> blocks, so that a name mentioned in a comment isn't found by mistake. For a duplicated layer it finds the second occurrence. Misspelled keys are errors rather than being ignored, because <code>isTriger = true</code> would otherwise silently make a solid collider. A value that belongs to the other shape is also an error: a sphere with a halfSize almost always means that the shape was changed and the size wasn't.</p>
+    <h3>Building them</h3>
+    <p>This is what a game adds to AssetBuildFunctions.lua and AssetsToBuild.lua (it will be in the user guide):</p>
+<pre><code>-- AssetBuildFunctions.lua (add once; ColliderBuilder.exe builds both kinds of file)
+local collisionLayersRelativePath = "Collision/game.layers"
+
+NewAssetTypeInfo( "collisionlayers",
+	{
+		ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+			local relativeDirectory, file = i_sourceRelativePath:match( "(.-)([^/\\]+)$" )
+			local fileName = file:match( "([^%.]+)" )
+			return relativeDirectory .. fileName .. ".binlayers"
+		end,
+		GetBuilderRelativePath = function()
+			return "ColliderBuilder.exe"
+		end,
+	}
+)
+
+NewAssetTypeInfo( "colliders",
+	{
+		ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+			local relativeDirectory, file = i_sourceRelativePath:match( "(.-)([^/\\]+)$" )
+			local fileName = file:match( "([^%.]+)" )
+			return relativeDirectory .. fileName .. ".bincollider"
+		end,
+		GetBuilderRelativePath = function()
+			return "ColliderBuilder.exe"
+		end,
+		RegisterReferencedAssets = function( i_sourceRelativePath )
+			-- Every collider uses the game's layers file, so it is built whenever any collider is
+			RegisterAssetToBeBuilt( collisionLayersRelativePath, "collisionlayers" )
+		end,
+		ShouldTargetBeBuilt = function( i_lastWriteTime_builtAsset )
+			-- A built collider stores the index of its layer, so it is rebuilt whenever the layers file changes
+			local path_layers = FindSourceContentAbsolutePathFromRelativePath( collisionLayersRelativePath )
+			if path_layers then
+				return GetLastWriteTime( path_layers ) &gt; i_lastWriteTime_builtAsset
+			else
+				return true
+			end
+		end,
+	}
+)
+
+-- AssetsToBuild.lua (list your own files)
+	collisionlayers = { "Collision/game.layers" },
+	colliders =
+	{
+		"Colliders/player.collider",
+		"Colliders/patroller.collider",
+		"Colliders/floor.collider",
+		"Colliders/crate.collider",
+		"Colliders/spinner.collider",
+	},</code></pre>
+    <p>A collider names its layer, and ColliderBuilder turns the name into the layer's index at build time, so the game never compares strings. That makes every collider depend on the layers file, which is handled in two places. The builder finds the layers file at <code>Collision/game.layers</code> in the game's content directory (the asset build passes that directory to builders in the <code>GameSourceContentDir</code> environment variable). And the colliders asset type tells the build system about the dependency: <code>ShouldTargetBeBuilt()</code> rebuilds every collider when the layers file is newer (I checked: touching game.layers rebuilt all five colliders), and <code>RegisterReferencedAssets()</code> registers the layers file whenever a collider is built (the asset build system's hook for assets that use other assets), so listing it in AssetsToBuild.lua is optional.</p>
+    <h3>The binary files</h3>
+    <p>Both kinds of built file are as simple as I could make them, because loading should be nothing more than reading:</p>
+<pre><code>player.bincollider (32 bytes: one ColliderFormats::sCollider)
+  00 00 00 00 00 00 00 00 00 00 00 00   center    (0, 0, 0)
+  00 00 00 3F 00 00 00 3F 00 00 00 3F   halfSize  (0.5, 0.5, 0.5)   (a sphere's bounding box)
+  00 00 00 3F                           radius    0.5
+  00 01 00 00                           shape 0 = sphere, layer 1 = "player", flags 0, unused
+
+floor.bincollider
+  00 00 00 00 CD CC 4C BD 00 00 00 00   center    (0, -0.05, 0)
+  00 00 80 40 CD CC 4C 3D 00 00 80 40   halfSize  (4, 0.05, 4)
+  00 00 00 00                           radius    0 (boxes don't use it)
+  01 00 02 00                           shape 1 = box, layer 0 = "world", flags 2 = static, unused
+
+game.binlayers (62 bytes: four pieces)
+  04 00 00 00                           4 layers
+  06 00 00 00 0D 00 00 00 03 00 00 00   interaction masks: world = 0110 (player, enemy),
+  02 00 00 00                             player = 1101, enemy = 0011, pickup = 0010
+  00 00 00 00 06 00 00 00 0D 00 00 00   where each name starts: 0, 6, 13, 19
+  13 00 00 00
+  77 6F 72 6C 64 00 70 6C 61 79 65 72   "world\0player\0enemy\0pickup\0"
+  00 65 6E 65 6D 79 00 70 69 63 6B 75
+  70 00</code></pre>
+    <p>A collider's file is one struct, <code>ColliderFormats::sCollider</code>: two vectors, a float and four bytes, exactly 32 bytes with no hidden padding (a <code>static_assert</code> checks it), so the builder writes it with one write and the game loads it with one copy:</p>
+<pre><code>// cCollider::Load(): the built file is exactly one struct, so loading it is one read and one copy
+Platform::sDataFromFile dataFromFile;
+Platform::LoadBinaryFile( i_path, dataFromFile, &amp;errorMessage );
+if ( dataFromFile.size != sizeof( ColliderFormats::sCollider ) ) { /* report the file and fail */ }
+ColliderFormats::sCollider colliderData;
+std::memcpy( &amp;colliderData, dataFromFile.data, sizeof( colliderData ) );
+// Then it is checked (a built file can be damaged, or out of date if the layers changed),
+// and the new collider is added to the world</code></pre>
+    <p>For a sphere, halfSize is filled in with the radius, so center ± halfSize is the bounding box of either shape and the quick test before the exact one doesn't need to know which shape it has. The layers file keeps the layer names (with an offset for each so that none have to be searched for) because a game needs them at run time, for example <code>Collision::GetLayerMask( "world" )</code> for next week's raycasts. The system keeps the loaded file in memory and points into it instead of copying the names. The files are the same on both platforms, since they only contain floats and small integers and both of our platforms are little-endian; if a platform ever needed something different, the builder is where it would change.</p>
+    <h2>How it works at run time</h2>
+    <p>Everything happens in <code>Collision::Update()</code>, which the game calls once per simulation update after moving its objects:</p>
+    <ul>
+      <li><strong>Remove the colliders that the game has released</strong> (see Lifetime below), sending OnExit to whatever they were still touching. This happens first, before anything reads a rigid body that may no longer exist.</li>
+      <li><strong>Calculate every collider's shape in world space once</strong> (the rigid body's position plus the offset from the file).</li>
+      <li><strong>Test every pair that could touch.</strong> A pair is skipped without any math if either collider is disabled, if both are static (they can never start or stop touching), or if the layers file doesn't pair their layers: one AND of the first layer's mask with the second layer's bit. Then the bounding boxes are compared, which rejects almost every pair cheaply, and only the pairs that are left get the exact test for their shapes.</li>
+      <li><strong>Compare with the previous update.</strong> The colliders are kept in the order they were created, so the list of touching pairs comes out sorted, and so does the list from the previous update. One walk through both lists side by side finds the pairs that are only in the old list (exit), only in the new one (enter), or in both (stay). Nothing is searched and nothing is allocated per collider.</li>
+      <li><strong>Send the events:</strong> all the exits, then the enters, then the stays. Both colliders of a pair are told, each from its own point of view: "other" is the other collider, and the normal points from the other collider toward this one, so the two sides get opposite normals (see the log above).</li>
+      <li><strong>Remove the colliders that were released from inside an event,</strong> so that whatever they were touching gets its OnExit in the same update.</li>
+    </ul>
+    <h3>The shape tests</h3>
+    <ul>
+      <li><strong>Sphere and sphere:</strong> they touch if the distance between the centers is at most the sum of the radii. The squared distance is compared first, so the square root is only needed for pairs that touch. The normal is along the line between the centers (straight up if the centers are in the same place).</li>
+      <li><strong>Sphere and box:</strong> clamp the sphere's center to the box to get the box's closest point; they touch if that point is inside the sphere, and the normal points from that point to the center. If the center is inside the box, the sphere leaves through the nearest face, and the depth is the radius plus the distance to that face.</li>
+      <li><strong>Box and box:</strong> they touch if they overlap along all three axes, and they are separated along the axis where they overlap the least.</li>
+    </ul>
+    <p>The boxes are axis-aligned: they don't rotate with their objects. That is what I proposed (oriented boxes are a stretch goal), and it works for the spinner's trigger because the coil only turns around its vertical axis.</p>
+    <h3>Lifetime, and changes made inside events</h3>
+    <p>This was the part that needed the most thought. Colliders are reference counted like meshes, but while a collider is in the world the system holds a reference of its own. So when the game releases a collider, even from inside an event, the collider doesn't disappear while the system is still using it, and the "other" collider in a contact is always valid during the event. The system sees that it is the only owner left, sends OnExit to whatever the collider was touching, and gives up its reference, which deletes it. A collider that the game has released never gets another event, because its functions probably refer to an object that is gone. Each function is copied before it is called, so a function that replaces itself (<code>collider-&gt;OnStay = nullptr;</code> inside OnStay) is safe. Calling <code>Update()</code> or <code>CleanUp()</code> from inside an event is refused with an assert. Everything else that a game changes during an event (moving an object, disabling a collider, loading a new one) is simply seen by the next update.</p>
+    <h2>The interface</h2>
+    <p>A game includes <code>Engine/Collision/Collision.h</code>. Its interface is <code>Collision::Initialize()</code>, <code>CleanUp()</code>, <code>Update()</code> and layer lookups (<code>GetLayerMask()</code>, <code>GetLayerIndex()</code>, <code>GetLayerName()</code>, <code>DoLayersInteract()</code>), plus <code>cCollider</code>: <code>Load()</code>, the three event functions, <code>userData</code>, <code>SetEnabled()</code>, reference counting and getters for its shape, size, center, layer and flags. Every header has comments written for someone using the system rather than for me.</p>
+    <p>It is platform-independent: the public headers only use the engine's math and physics types and the standard library (<code>std::function</code> for the events). Collision math has nothing platform-specific in it, and the only platform-specific code involved is the engine's existing reference-counting macro, so there was no need for a .win.cpp file. The bookkeeping (the colliders, the pairs, the layers) is in an internal class, <code>Internal::cWorld</code>, which cCollider makes a friend so that nothing about it has to be public.</p>
+    <h2>Testing</h2>
+    <ul>
+      <li><strong>42 unit tests</strong> in a small program that I built against the Debug library (it isn't in the repository): 12 for the shape tests (overlap, gap, exactly touching, the same center, a box's edge, a center inside a box, the order of the shapes) and 30 for the system (the layer table and lookups, static pairs, enter / stay / exit with the right "other" and opposite normals, disabling and enabling, a collider released between updates and from inside its partner's OnEnter, a function that replaces itself, and CleanUp() while the game still holds colliders). All pass.</li>
+      <li><strong>16 broken data files</strong> for ColliderBuilder; the messages above are from them.</li>
+      <li>All four configurations (Debug/Release, x64/x86) build from an empty temp/ folder with no errors and no warnings. Building only the game and running it shows "Initialization failed" and exits with code 1 (the first thing it can't find is the layers file); after building BuildMyGameAssets it runs.</li>
+    </ul>
+    <h2>Next: Update #2 (November 10)</h2>
+    <ul>
+      <li><strong>Solid response:</strong> a dynamic collider that touches a static one is pushed out along the normal by the penetration depth, two dynamic ones are pushed apart equally, and the part of the velocity that points into the surface is removed (otherwise our render-time extrapolation would draw objects sinking into walls). Triggers never push.</li>
+      <li><strong>Raycasts</strong> against spheres (quadratic) and boxes (slab method), filtered by a layer mask, returning the closest hit.</li>
+      <li><strong>A real demo:</strong> walls and the floor stop the player, the coil becomes a pickup that is collected (disabled) in OnEnter, and a raycast checks whether the player is on the ground.</li>
+      <li><strong>The first version of the user guide,</strong> so that classmates can start using the system in their final projects.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
