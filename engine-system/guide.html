@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Collision System: User Guide – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+        <a href="index.html">Engine System write-up</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Collision System: User Guide</h1>
+    <div class="download">
+      <a class="btn" href="YangBenjamin_CollisionSystem.zip">⬇ Download the code</a>
+      <small>the Collision library, ColliderBuilder, the block for AssetBuildFunctions.lua, example data and the user guide.</small>
+    </div>
+    <p><em>Version 1.0 (Engine System final write-up, November 2026). Benjamin Yang. Questions are welcome on Slack or by email, and I'm happy to help you get it into your game.</em></p>
+    <p>The Collision library gives your game objects shapes that know about each other:</p>
+    <ul>
+      <li><strong>Colliders</strong>: spheres and axis-aligned boxes, described in small Lua files and attached to your objects' rigid bodies.</li>
+      <li><strong>Layers</strong>: you name the kinds of things in your game (<code>"world"</code>, <code>"player"</code>, <code>"enemy"</code>, ...) and say which of them touch each other.</li>
+      <li><strong>Solid response</strong>: walls stop things and floors hold them up. A moving collider that runs into something solid is pushed back out, and the part of its velocity that points into the surface is removed.</li>
+      <li><strong>Triggers</strong>: colliders that report overlaps but never push anything (pickups, checkpoints, damage zones, the goal).</li>
+      <li><strong>Events</strong>: <code>OnEnter</code>, <code>OnStay</code> and <code>OnExit</code> functions on each collider, with the other collider, the contact normal and how deep they overlapped.</li>
+      <li><strong>Raycasts</strong>: "what is the first thing in this direction, and how far away is it?" (ground checks, line of sight, shooting, AI that looks ahead).</li>
+    </ul>
+    <p>It is <strong>not</strong> a physics engine. Nothing rotates, there is no mass, friction or bounciness, and gravity is up to you (set your rigid body's <code>acceleration</code>). You move your objects the way you always have, and the collision system keeps them out of each other.</p>
+    <p>It only uses engine code that we all got in Assignment 01 (Asserts, Logging, Math, Physics, Platform, Results, ScopeGuard, Windows, Lua and the AssetBuildLibrary), so it should drop into any of our solutions. Nothing in Graphics, in your meshes or in your effects has to change.</p>
+    <hr>
+    <h2>1. What is in the download</h2>
+    <table>
+      <thead><tr><th>Folder or file</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td><code>Engine/Collision/</code></td><td>The run-time static library. <code>Collision.h</code> is the only header your game includes. This guide is in there too.</td></tr>
+        <tr><td><code>Tools/ColliderBuilder/</code></td><td>The builder that turns the human-readable <code>.layers</code> and <code>.collider</code> files into small binary files at build time (it is built like MeshBuilder).</td></tr>
+        <tr><td><code>AssetBuildFunctions_Collision.lua</code></td><td>The two asset types to paste into your <code>AssetBuildFunctions.lua</code> (section 3).</td></tr>
+        <tr><td><code>ExampleContent/</code></td><td>An example layers file, six example collider files and the lines for <code>AssetsToBuild.lua</code>.</td></tr>
+      </tbody>
+    </table>
+    <p>Copying the two project folders into your solution only adds new folders. It doesn't replace any file that you already have.</p>
+    <h2>2. Setting up your solution (once)</h2>
+    <p>This takes about ten minutes. I tested these exact steps on a clean copy of my Assignment 08 solution, which had never had the collision system in it: all four configurations built with no errors and no warnings, and the game ran.</p>
+    <ol>
+      <li>Copy <code>Engine\Collision</code> into your solution's <code>Engine</code> folder and <code>Tools\ColliderBuilder</code> into its <code>Tools</code> folder (next to <code>MeshBuilder</code>).</li>
+      <li>In Visual Studio's Solution Explorer, right-click the <strong>Engine</strong> solution folder &gt; <strong>Add &gt; Existing Project...</strong> and choose <code>Engine\Collision\Collision.vcxproj</code>. Then right-click the <strong>Tools</strong> folder &gt; <strong>Add &gt; Existing Project...</strong> and choose <code>Tools\ColliderBuilder\ColliderBuilder.vcxproj</code>.<ul><li>Collision references Asserts, Logging, Math, Physics, Platform, Results and Windows, which you already have.</li><li>ColliderBuilder references Asserts, Platform, Windows, LuaLib and AssetBuildLibrary, the same as MeshBuilder.</li><li>Both use <code>EngineDefaults.props</code> like every other project, so they build for x64 (Direct3D) and x86 (OpenGL) in Debug and Release, and <code>ColliderBuilder.exe</code> ends up next to <code>MeshBuilder.exe</code>.</li></ul></li>
+      <li>Right-click your game project (MyGame) &gt; <strong>Add &gt; Reference...</strong> and tick <strong>Collision</strong>.</li>
+      <li>Right-click <strong>BuildMyGameAssets</strong> &gt; <strong>Build Dependencies &gt; Project Dependencies...</strong> and tick <strong>ColliderBuilder</strong> (the same way it depends on MeshBuilder), so that the builder is always built before your assets.</li>
+      <li>Paste the asset types into <code>Tools\AssetBuildLibrary\AssetBuildFunctions.lua</code> (section 3 says where).</li>
+      <li>Copy <code>ExampleContent\Collision</code> and <code>ExampleContent\Colliders</code> into <code>MyGame_\Content</code> (or write your own files, sections 4 and 5), and add the two tables from <code>ExampleContent\AssetsToBuild_Collision.lua</code> to <code>MyGame_\Content\AssetsToBuild.lua</code> (section 6).</li>
+      <li>Build the solution. Your game's <code>data</code> folder now has <code>Collision\game.binlayers</code> and a <code>.bincollider</code> for every collider file.</li>
+      <li>Add the code to your game (section 7). When you run it, the first lines that the collision system writes to <code>eae6320.log</code> list your layers and what each of them touches:</li>
+    </ol>
+<pre><code>Collision: initialized with 4 layers from "data/Collision/game.binlayers"
+Collision:   layer 0 "world" touches: player, enemy
+Collision:   layer 1 "player" touches: world, enemy, pickup
+Collision:   layer 2 "enemy" touches: world, player
+Collision:   layer 3 "pickup" touches: player</code></pre>
+    <h2>3. What to add to AssetBuildFunctions.lua</h2>
+    <p>Paste the block below (it is also in <code>AssetBuildFunctions_Collision.lua</code>) <strong>right after your mesh asset type</strong>, before the line <code>-- Local Function Definitions</code> (the very end of the file works too). It calls <code>NewAssetTypeInfo()</code>, <code>RegisterAssetToBeBuilt()</code> and <code>FindSourceContentAbsolutePathFromRelativePath()</code>, which are local functions defined higher up in that file, so it has to come after them: pasted at the top of the file, the asset build fails with <code>attempt to call a nil value (global 'NewAssetTypeInfo')</code>. Nothing else in the file changes.</p>
+<pre><code>-- Collision Asset Types
+------------------------
+
+-- ColliderBuilder.exe builds both of the collision system's file types:
+--    * the game's layers file (Collision/game.layers -&gt; Collision/game.binlayers)
+--    * collider files (e.g. Colliders/player.collider -&gt; Colliders/player.bincollider)
+-- A collider names its layer, and ColliderBuilder turns that name into the layer's index using the game's layers file,
+-- so that file is always at the same path in the game's content directory
+local collisionLayersRelativePath = "Collision/game.layers"
+
+NewAssetTypeInfo( "collisionlayers",
+    {
+        ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+            local relativeDirectory, file = i_sourceRelativePath:match( "(.-)([^/\\]+)$" )
+            local fileName = file:match( "([^%.]+)" )
+            return relativeDirectory .. fileName .. ".binlayers"
+        end,
+        GetBuilderRelativePath = function()
+            return "ColliderBuilder.exe"
+        end,
+    }
+)
+
+NewAssetTypeInfo( "colliders",
+    {
+        ConvertSourceRelativePathToBuiltRelativePath = function( i_sourceRelativePath )
+            local relativeDirectory, file = i_sourceRelativePath:match( "(.-)([^/\\]+)$" )
+            local fileName = file:match( "([^%.]+)" )
+            return relativeDirectory .. fileName .. ".bincollider"
+        end,
+        GetBuilderRelativePath = function()
+            return "ColliderBuilder.exe"
+        end,
+        RegisterReferencedAssets = function( i_sourceRelativePath )
+            -- Every collider uses the game's layers file (and the game loads it before any collider),
+            -- so it is built whenever any collider is
+            RegisterAssetToBeBuilt( collisionLayersRelativePath, "collisionlayers" )
+        end,
+        ShouldTargetBeBuilt = function( i_lastWriteTime_builtAsset )
+            -- A built collider stores the index of its layer,
+            -- so it has to be built again whenever the layers file changes
+            -- (if the layers file doesn't exist the collider's build reports that)
+            local path_layers = FindSourceContentAbsolutePathFromRelativePath( collisionLayersRelativePath )
+            if path_layers then
+                return GetLastWriteTime( path_layers ) &gt; i_lastWriteTime_builtAsset
+            else
+                return true
+            end
+        end,
+    }
+)</code></pre>
+    <p>Because of <code>ShouldTargetBeBuilt()</code>, changing the layers file rebuilds every collider (a built collider stores the index of its layer, not its name). Because of <code>RegisterReferencedAssets()</code>, the layers file is built whenever any collider is, even if you forget to list it.</p>
+    <h2>4. The layers file: <code>Content/Collision/game.layers</code></h2>
+    <p>Every game has exactly one layers file, and it must be at this path. It names the layers and says which pairs of layers touch each other:</p>
+<pre><code>return
+{
+    layers =
+    {
+        "world",    -- floors, walls, crates
+        "player",
+        "enemy",
+        "pickup",
+    },
+    -- Only these pairs touch (and push each other). Anything not listed passes through without any events.
+    interactions =
+    {
+        { "player", "world" },
+        { "player", "enemy" },
+        { "player", "pickup" },
+        { "enemy", "world" },
+        -- { "enemy", "enemy" },    -- a layer can be paired with itself
+    },
+}</code></pre>
+    <ul>
+      <li>1 to 32 layers. Names must be unique and not empty.</li>
+      <li>An interaction must name two layers from the list. The order inside a pair doesn't matter.</li>
+      <li>Raycasts don't use the interactions. They choose layers with a layer mask instead (section 9).</li>
+      <li>Making something not interact with something else is a one-line change here, with no code. For example, enemies don't collect pickups because <code>"enemy"</code> and <code>"pickup"</code> aren't paired.</li>
+    </ul>
+    <h2>5. Collider files: <code>Content/Colliders/*.collider</code></h2>
+    <p>One file per <em>kind</em> of collider. Many objects can load the same file, and each one gets its own collider.</p>
+<pre><code>return
+{
+    shape = "sphere",    -- "sphere" or "box" (required)
+    radius = 0.5,    -- spheres only (required for a sphere)
+    -- halfSize = { x = 0.5, y = 0.5, z = 0.5 },    -- boxes only: half of the box's size along each axis (required for a box)
+    -- center = { x = 0.0, y = 0.0, z = 0.0 },    -- optional offset from the object's position (missing components are 0)
+    layer = "player",    -- one of the names in game.layers (required)
+    -- isTrigger = false,    -- optional: true reports overlaps but never pushes and is never pushed
+    -- isStatic = false,    -- optional: true for things that never move (floors, walls); they are never pushed
+}</code></pre>
+    <table>
+      <thead><tr><th>Key</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>shape</code></td><td><code>"sphere"</code> or <code>"box"</code></td><td>Boxes are axis-aligned: they don't rotate with their object.</td></tr>
+        <tr><td><code>radius</code></td><td>number &gt; 0</td><td>Spheres only. Use your sphere mesh's radius.</td></tr>
+        <tr><td><code>halfSize</code></td><td><code>{ x, y, z }</code>, all &gt; 0</td><td>Boxes only. A 1 x 1 x 1 cube has <code>halfSize = { x = 0.5, y = 0.5, z = 0.5 }</code>.</td></tr>
+        <tr><td><code>center</code></td><td><code>{ x, y, z }</code></td><td>Use it when the mesh's origin isn't the middle of the shape (e.g. a floor plane whose box hangs below it).</td></tr>
+        <tr><td><code>layer</code></td><td>string</td><td>Must be a layer in <code>game.layers</code>.</td></tr>
+        <tr><td><code>isTrigger</code></td><td>boolean</td><td>Default <code>false</code>.</td></tr>
+        <tr><td><code>isStatic</code></td><td>boolean</td><td>Default <code>false</code>. Two static colliders are never tested against each other.</td></tr>
+      </tbody>
+    </table>
+    <p>ColliderBuilder checks everything and reports problems in Visual Studio's <strong>Error List</strong> with the file and line. Double-clicking an error opens the file at that line. It catches misspelled keys (<code>isTriger</code>), a layer that isn't in the layers file, a negative radius, a sphere with a <code>halfSize</code>, Lua syntax errors, and similar mistakes. For example:</p>
+<pre><code>Colliders/pickup.collider(13): error : The collider file has an unknown key "isTriger" (the valid keys are: "shape", "radius", "halfSize", "center", "layer", "isTrigger", "isStatic")
+Colliders/player.collider(15): error : The layer "plaeyr" isn't in the game's layers file (Collision/game.layers); the layers are: "world", "player", "enemy", "pickup"</code></pre>
+    <h2>6. AssetsToBuild.lua</h2>
+    <p>Add these two tables next to <code>shaders</code> and <code>meshes</code>, and list the files that are really in your content folder:</p>
+<pre><code>    collisionlayers =
+    {
+        "Collision/game.layers",
+    },
+    colliders =
+    {
+        "Colliders/player.collider",
+        "Colliders/crate.collider",
+        -- ...
+    },</code></pre>
+    <p>The built files end up at <code>data/Collision/game.binlayers</code> and <code>data/Colliders/&lt;name&gt;.bincollider</code>.</p>
+    <h2>7. Using it in your game</h2>
+<pre><code>#include &lt;Engine/Collision/Collision.h&gt;</code></pre>
+    <p>The easiest place to keep a collider is next to the rigid body that it follows, for example a <code>Collision::cCollider* collider = nullptr;</code> member in your game object struct, or a member of your game class.</p>
+    <p><strong>Initialize()</strong>: initialize the system first, then load colliders and attach them to rigid bodies:</p>
+<pre><code>if ( !( result = Collision::Initialize( "data/Collision/game.binlayers" ) ) )
+    return result;
+
+Collision::cCollider* playerCollider = nullptr;
+if ( !( result = Collision::cCollider::Load( "data/Colliders/player.bincollider", m_player.rigidBodyState, playerCollider ) ) )
+    return result;
+playerCollider-&gt;userData = &amp;m_player;    // so that an event or a raycast can find your object</code></pre>
+    <p>The collider follows the rigid body: its center is always <code>rigidBodyState.position + center</code>. The rigid body must stay where it is in memory while the collider exists. A member of your game class, an element of a fixed-size array, or an object that you allocated with <code>new</code> (or a <code>std::unique_ptr</code>) is fine. An element of a <code>std::vector</code> of objects that can grow is not, because the vector moves its elements when it grows.</p>
+    <p>If the game is run before its assets have been built, <code>Initialize()</code> and <code>Load()</code> write what is missing to the log and return a failure. Return it from your <code>Initialize()</code> like the code above does, and the application shows its "initialization failed" message instead of crashing.</p>
+    <p><strong>UpdateSimulationBasedOnTime()</strong>: move everything, then call <code>Collision::Update()</code> once:</p>
+<pre><code>m_player.rigidBodyState.Update( i_elapsedSecondCount_sinceLastUpdate );
+m_enemy.rigidBodyState.Update( i_elapsedSecondCount_sinceLastUpdate );
+Collision::Update();    // pushes solid colliders apart, then sends the events</code></pre>
+    <p><strong>CleanUp()</strong>: release your references, then clean up the system:</p>
+<pre><code>playerCollider-&gt;DecrementReferenceCount();
+playerCollider = nullptr;
+// ... every other collider ...
+Collision::CleanUp();</code></pre>
+    <p>Colliders are reference counted like meshes and effects. <code>Load()</code> gives you one reference. To remove a collider from the world at any time (a collected pickup, a destroyed enemy), call <code>DecrementReferenceCount()</code>. The system removes it safely at its next update and sends <code>OnExit</code> to everything it was touching, and it never reads that rigid body again, so you can delete the object right away. To switch a collider off for a while, use <code>SetEnabled( false )</code> instead. If you forget to release a collider before <code>Collision::CleanUp()</code>, the log says how many were still held.</p>
+    <h2>8. Events</h2>
+<pre><code>playerCollider-&gt;OnEnter = [this]( const Collision::sContact&amp; i_contact )
+{
+    // i_contact.other: the other collider (use other-&gt;userData to find its object)
+    // i_contact.normal: unit vector from the other collider toward this one
+    // i_contact.penetrationDepth: how far they overlapped before they were pushed apart
+    if ( i_contact.other == m_enemy.collider )
+    {
+        if ( i_contact.normal.y &gt; 0.7f )
+            BounceOffEnemysHead();    // landed on top
+        else
+            GetHurt();
+    }
+};
+playerCollider-&gt;OnStay = [this]( const Collision::sContact&amp; i_contact ) { /* every update while touching */ };
+playerCollider-&gt;OnExit = [this]( const Collision::sContact&amp; i_contact ) { /* normal and depth are 0 here */ };</code></pre>
+    <ul>
+      <li>Both colliders of a pair get the event, each from its own point of view (opposite normals).</li>
+      <li>In one update all exits are sent first, then all enters, then all stays.</li>
+      <li>Resting on something counts as touching (shapes within 0.001 units of each other touch). A ball sitting on the floor gets one <code>OnEnter</code> and then <code>OnStay</code> every update, without flickering.</li>
+      <li>Inside an event you may move objects, change velocities, enable or disable colliders, release colliders (even the other one), load new ones and raycast. Changes take effect in the next update. You may <strong>not</strong> call <code>Collision::Update()</code> or <code>Collision::CleanUp()</code> from inside an event (it asserts).</li>
+      <li>The events are <code>std::function</code>s, so a lambda that captures <code>this</code> is the easiest. Any of them can be left empty.</li>
+    </ul>
+    <h2>9. Raycasts</h2>
+<pre><code>Collision::sRaycastHit hit;
+if ( Collision::Raycast( origin, direction, maxDistance, hit, Collision::GetLayerMask( "world" ) ) )
+{
+    // hit.collider, hit.point, hit.normal (pointing back toward the ray), hit.distance
+}</code></pre>
+    <ul>
+      <li><code>direction</code> can be any length except 0. It is normalized for you.</li>
+      <li>The layer mask says which layers can be hit. The default is every layer. Masks combine with <code>|</code>: <code>GetLayerMask( "world" ) | GetLayerMask( "enemy" )</code>.</li>
+      <li><code>GetLayerMask()</code> looks the name up every time it is called (and asserts if there is no such layer). If you raycast every update, look the masks up once after <code>Initialize()</code> and keep them in members.</li>
+      <li>Disabled colliders are never hit. Triggers are skipped unless you pass <code>true</code> as the last argument.</li>
+      <li><strong>A ray that starts inside a collider doesn't hit that collider</strong>, so a ray cast from your object's center never hits its own collider.</li>
+      <li>It changes nothing, so you can call it any time after <code>Initialize()</code>, including from inside an event.</li>
+      <li><code>hit.collider</code> is valid until the next <code>Collision::Update()</code>.</li>
+    </ul>
+    <p><strong>Ground check</strong> (jump only when standing on something):</p>
+<pre><code>Collision::sRaycastHit hit;
+const bool isOnGround = Collision::Raycast( m_player.rigidBodyState.position, Math::sVector( 0.0f, -1.0f, 0.0f ),
+    playerRadius + 0.05f, hit, Collision::GetLayerMask( "world" ) );</code></pre>
+    <p><strong>Line of sight</strong> (can the enemy see the player, or is a wall in the way?):</p>
+<pre><code>const auto toPlayer = m_player.rigidBodyState.position - m_enemy.rigidBodyState.position;
+Collision::sRaycastHit hit;
+const bool canSeePlayer = Collision::Raycast( m_enemy.rigidBodyState.position, toPlayer, toPlayer.GetLength(), hit,
+        Collision::GetLayerMask( "world" ) | Collision::GetLayerMask( "player" ) )
+    &amp;&amp; ( hit.collider == m_player.collider );</code></pre>
+    <h2>10. Common tasks</h2>
+    <p>Short recipes. The names (<code>m_coin</code>, <code>m_layerMask_world</code>, ...) are made up; the patterns are the ones my demo uses.</p>
+    <p><strong>A pickup</strong> (a coin, a key, a checkpoint). Give it a static trigger in a <code>"pickup"</code> layer that only <code>"player"</code> interacts with, so nothing else can ever enter it:</p>
+<pre><code>m_coin.collider-&gt;OnEnter = [this]( const Collision::sContact&amp; )
+{
+    ++m_score;
+    m_coin.isVisible = false;    // (your own flag: stop submitting its mesh)
+    m_coin.collider-&gt;SetEnabled( false );    // it can't be collected again until you enable it
+};</code></pre>
+    <p><strong>Which object did I touch?</strong> Set <code>userData</code> when you load a collider, and cast it back in the event:</p>
+<pre><code>auto* const otherObject = static_cast&lt;sGameObject*&gt;( i_contact.other-&gt;userData );
+const bool isEnemy = ( i_contact.other-&gt;GetLayerMask() &amp; m_layerMask_enemy ) != 0;</code></pre>
+    <p><strong>Gravity and jumping.</strong> Gravity is just an acceleration. The ground check above decides whether a jump is allowed, and clamping the falling speed keeps fast falls from tunneling through floors (section 12):</p>
+<pre><code>// Initialize()
+m_player.rigidBodyState.acceleration = Math::sVector( 0.0f, -12.0f, 0.0f );
+// UpdateSimulationBasedOnInput()
+if ( m_isPlayerOnGround &amp;&amp; UserInput::IsKeyPressed( UserInput::KeyCodes::Space ) )
+    m_player.rigidBodyState.velocity.y = 6.5f;
+// UpdateSimulationBasedOnTime(), before moving the player
+auto&amp; velocity = m_player.rigidBodyState.velocity;
+velocity.y = std::max( velocity.y, -12.0f );</code></pre>
+    <p>A floor or a crate that the player lands on removes the falling velocity, so the player comes to rest on top of it without bouncing or sinking.</p>
+    <p><strong>An enemy that turns around at walls</strong> (and at ledges). Look a little ahead with a ray that only sees the world:</p>
+<pre><code>Collision::sRaycastHit hit;
+const Math::sVector ahead( m_enemyDirection, 0.0f, 0.0f );
+const bool isWallAhead = Collision::Raycast( enemyPosition, ahead, enemyRadius + 0.1f, hit, m_layerMask_world );
+// (a ray cast straight down from a point just in front of the enemy finds a ledge: nothing below means no floor)
+const bool isFloorAhead = Collision::Raycast( enemyPosition + ahead * ( enemyRadius + 0.1f ), Math::sVector( 0.0f, -1.0f, 0.0f ),
+    enemyRadius + 0.2f, hit, m_layerMask_world );
+if ( isWallAhead || !isFloorAhead )
+    m_enemyDirection = -m_enemyDirection;</code></pre>
+    <p><strong>Landing on an enemy vs. being hit by it.</strong> The contact normal points from the other collider toward the one being told, so in the player's <code>OnEnter</code> a normal that points mostly up means that the player came from above (see the example in section 8; my demo uses <code>normal.y &gt;= 0.7</code>).</p>
+    <p><strong>Moving platforms and doors.</strong> Use a static collider and move its rigid body yourself (set its velocity, or its position). Static colliders are never pushed, and dynamic colliders are pushed out of their way. A platform doesn't carry what stands on it sideways: if you need that, add the platform's velocity to the rider's.</p>
+    <p><strong>Removing an object for good.</strong> <code>collider-&gt;DecrementReferenceCount()</code> and forget the pointer. Everything it was touching gets <code>OnExit</code> at the next update.</p>
+    <p><strong>Many objects with the same collider.</strong> Load the same file once per object. Keep the objects somewhere that doesn't move in memory (section 7):</p>
+<pre><code>sGameObject m_crates[s_crateCount];    // a fixed array never moves its elements
+for ( auto&amp; crate : m_crates )
+{
+    if ( !( result = Collision::cCollider::Load( "data/Colliders/crate.bincollider", crate.rigidBodyState, crate.collider ) ) )
+        return result;
+    crate.collider-&gt;userData = &amp;crate;
+}</code></pre>
+    <h2>11. How the solid response works</h2>
+    <p><code>Collision::Update()</code> first finds every pair that touches. Then, for every pair where neither collider is a trigger:</p>
+    <table>
+      <thead><tr><th>Pair</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td>dynamic and static</td><td>The dynamic collider is moved all of the way out along the contact normal, and the part of its velocity that points into the static one is removed. It slides along walls and comes to rest on floors without bouncing or sinking.</td></tr>
+        <tr><td>dynamic and dynamic</td><td>Each is moved half of the way, and the speed at which they were approaching each other is taken from both equally, as if they had the same mass.</td></tr>
+        <tr><td>anything and a trigger</td><td>Nothing is pushed. Only the events are sent.</td></tr>
+        <tr><td>static and static</td><td>Never tested.</td></tr>
+      </tbody>
+    </table>
+    <p>A collider in a corner touches two things at once. The overlaps are resolved again (up to 4 passes), each time from where the colliders are after the last pass. Only <code>position</code> and <code>velocity</code> are changed, never <code>acceleration</code> or <code>orientation</code>.</p>
+    <p>Why the velocity changes too: our rendering extrapolates every object by its velocity (<code>PredictFutureTransform()</code>), so an object that kept its velocity into a floor would be drawn sinking into the floor between simulation updates.</p>
+    <p>Design tips:</p>
+    <ul>
+      <li>Make everything that never moves <code>isStatic = true</code>. It is cheaper, and it means "never pushed".</li>
+      <li>Let input set velocities every update, as usual. If the player holds "right" against a wall, it is pushed back out every update and stays touching the wall.</li>
+    </ul>
+    <h2>12. Limits, and how to stay inside them</h2>
+    <ul>
+      <li><strong>Tunneling</strong>: collisions are checked once per simulation update. If something moves farther than about half the thickness of what it should hit in one update, it can end up past the middle and be pushed out of the wrong side. Make floors and walls thick (my floor is a whole unit thick), clamp falling speed, and consider a faster simulation rate. My demo overrides <code>GetSimulationUpdatePeriod_inSeconds()</code> to return 1/60 (the default is 1/15).</li>
+      <li><strong>Boxes don't rotate</strong>. For an object that spins around its vertical axis, use a box that encloses it in every direction, or a sphere.</li>
+      <li><strong>Two dynamic colliders are treated as if they had the same mass.</strong> There are no masses, so a heavy object and a light one push each other equally.</li>
+      <li><strong>A single ground-check ray can miss a ledge</strong> that only the edge of a sphere rests on. Cast a second ray a little to each side if that matters in your game.</li>
+      <li>Every pair of colliders is tested every update (a cheap bounding-box test rejects most pairs). That is fine for dozens or a few hundred colliders. There is no broad phase.</li>
+      <li>At most 32 layers.</li>
+      <li>Call everything from the simulation thread (the thread that runs <code>UpdateSimulationBasedOnTime()</code>).</li>
+    </ul>
+    <h2>13. Troubleshooting</h2>
+    <p>When something builds wrong:</p>
+    <table>
+      <thead><tr><th>Problem</th><th>Things to check</th></tr></thead>
+      <tbody>
+        <tr><td><code>attempt to call a nil value (global 'NewAssetTypeInfo')</code> when the assets build</td><td>The block from section 3 is above the place where <code>NewAssetTypeInfo()</code> is defined. Move it to just after your mesh asset type.</td></tr>
+        <tr><td><code>No asset type info has been defined for "colliders"</code> (or <code>"collisionlayers"</code>)</td><td>The block from section 3 isn't in <code>AssetBuildFunctions.lua</code>.</td></tr>
+        <tr><td><code>The builder "...ColliderBuilder.exe" doesn't exist</code></td><td>BuildMyGameAssets doesn't depend on ColliderBuilder (setup step 4), so the assets were built before the builder.</td></tr>
+        <tr><td><code>Cannot open include file: 'Engine/Collision/Collision.h'</code></td><td>The library isn't at <code>Engine\Collision</code> in your solution's folder.</td></tr>
+        <tr><td><code>unresolved external symbol</code> with <code>eae6320::Collision::</code> in it</td><td>Your game project doesn't reference Collision (setup step 3).</td></tr>
+        <tr><td><code>The game's layers file couldn't be found</code></td><td>The layers file must be <code>Collision/game.layers</code> in your game's content folder.</td></tr>
+        <tr><td>A collider error in the Error List</td><td>Double-click it. The message names the key or layer that is wrong.</td></tr>
+      </tbody>
+    </table>
+    <p>When something runs wrong:</p>
+    <table>
+      <thead><tr><th>Problem</th><th>Things to check</th></tr></thead>
+      <tbody>
+        <tr><td>The game says initialization failed</td><td>Build BuildMyGameAssets. Check the paths you pass to <code>Initialize()</code> and <code>Load()</code>. The log (<code>eae6320.log</code>) says which file failed and why.</td></tr>
+        <tr><td>Two objects pass through each other</td><td>Are their layers paired in <code>interactions</code>? Is one of them a trigger? Are both static? Is one disabled? Are you calling <code>Collision::Update()</code> after moving them? Is something moving too fast (section 12)?</td></tr>
+        <tr><td>A raycast misses</td><td>Does the layer mask include the layer? Is the target a trigger (pass <code>true</code>)? Does the ray start inside the target? Is <code>maxDistance</code> long enough?</td></tr>
+        <tr><td>An object is drawn sinking into a wall</td><td>Is the wall's collider as big as its mesh? Is the object's collider dynamic (<code>isStatic</code> not set)?</td></tr>
+        <tr><td>Events arrive one update late</td><td>Changes made inside an event (moving, disabling, releasing) take effect in the next <code>Update()</code>, by design.</td></tr>
+        <tr><td>A collider is in the wrong place</td><td>Its center is the rigid body's position plus <code>center</code>. Is the rigid body that you passed to <code>Load()</code> the one that you move?</td></tr>
+      </tbody>
+    </table>
+    <p>The log lists your layers and what each one touches when the system is initialized, which is the first thing to look at when something doesn't collide.</p>
+    <h2>14. The interface at a glance</h2>
+    <table>
+      <thead><tr><th>Call</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><code>Collision::Initialize( path )</code></td><td>Loads the built layers file. Call it before loading any collider.</td></tr>
+        <tr><td><code>Collision::Update()</code></td><td>Once per simulation update, after moving your objects: pushes solid colliders apart, then sends the events.</td></tr>
+        <tr><td><code>Collision::CleanUp()</code></td><td>Removes every collider (without events). Release your references first.</td></tr>
+        <tr><td><code>Collision::Raycast( origin, direction, maxDistance, o_hit, layerMask, shouldTriggersBeHit )</code></td><td>The closest hit, if any.</td></tr>
+        <tr><td><code>Collision::GetLayerMask( name )</code>, <code>GetLayerIndex( name, o_index )</code>, <code>GetLayerName( index )</code>, <code>DoLayersInteract( a, b )</code></td><td>Layer lookups.</td></tr>
+        <tr><td><code>cCollider::Load( path, rigidBody, o_collider )</code></td><td>Loads a built collider, attaches it to the rigid body and adds it to the world.</td></tr>
+        <tr><td><code>collider-&gt;OnEnter</code>, <code>OnStay</code>, <code>OnExit</code></td><td>The event functions (<code>std::function&lt;void( const sContact&amp; )&gt;</code>).</td></tr>
+        <tr><td><code>collider-&gt;userData</code></td><td>Your own pointer. The system never looks at it.</td></tr>
+        <tr><td><code>collider-&gt;SetEnabled( bool )</code>, <code>IsEnabled()</code></td><td>Switch a collider off and on.</td></tr>
+        <tr><td><code>GetShape()</code>, <code>GetRadius()</code>, <code>GetHalfSize()</code>, <code>GetCenterOffset()</code>, <code>GetCenter()</code>, <code>GetLayer()</code>, <code>GetLayerMask()</code>, <code>IsTrigger()</code>, <code>IsStatic()</code>, <code>GetRigidBody()</code>, <code>GetId()</code></td><td>What the collider is and where it is now.</td></tr>
+        <tr><td><code>IncrementReferenceCount()</code>, <code>DecrementReferenceCount()</code></td><td>Reference counting, like meshes and effects.</td></tr>
+      </tbody>
+    </table>
+    <p>Every header has comments written for someone using the system: <code>Collision.h</code> (the system and raycasts) and <code>cCollider.h</code> (colliders, lifetime, events and the response) are the two to read.</p>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a> · <a href="index.html">Engine System write-up</a></div>
+  </footer>
+</body>
+</html>

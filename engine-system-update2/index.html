@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine System Update #2 – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Engine System Update #2: Collision</h1>
+    <p class="subtitle">Solid objects now stop each other, raycasts work, MyGame is a small platformer built on both, and the first version of the user guide is written</p>
+
+    <div class="download">
+      <a class="btn" href="YangBenjamin_EngineSystemUpdate2_Direct3D_x64.zip">⬇ Download the demo (Direct3D, x64)</a>
+      <a class="btn secondary" href="YangBenjamin_EngineSystemUpdate2_OpenGL_x86.zip">⬇ OpenGL build (x86)</a>
+      <a class="btn secondary" href="guide.html">User guide (first version)</a>
+      <small>Unzip anywhere and double click <code>MyGame.exe</code>. ESC closes the game. The left and right arrow keys move the orange ball (the player), and the up arrow or <kbd>SPACE</kbd> jumps, but only while a raycast says that it is standing on something. <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> move the camera and <kbd>Q</kbd>/<kbd>E</kbd> turn it. Every touch that starts or ends is written to <code>eae6320.log</code> next to the exe.</small>
+    </div>
+
+    <h2>Where the project is</h2>
+    <p>My Engine System is a collision system: sphere and axis-aligned box colliders described in data files and attached to game objects, collision layers that decide what can touch what, and events that tell the game when colliders start touching, keep touching and stop touching (that much was Update #1). Since then the system keeps solid objects out of each other and answers raycasts, MyGame has become a small platformer that is built on both, and the first version of the user guide is written. This is what my proposal planned for this update:</p>
+    <table>
+      <thead><tr><th>Planned for Update #2</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Solid response and velocity correction</td><td>Done. A dynamic collider is pushed out of a static one, two dynamic ones are pushed apart equally, and the velocity that points into the surface is removed. Triggers never push and are never pushed.</td></tr>
+        <tr><td>Triggers and the layer table</td><td>Already done in Update #1. Raycasts now filter by layer too.</td></tr>
+        <tr><td>Raycasts</td><td>Done. Spheres (a quadratic) and boxes (the slab method), a layer mask, triggers only if asked for, and the closest hit with its collider, point, normal and distance.</td></tr>
+        <tr><td>The MyGame demo</td><td>Done. Walls, a floor and steps of crates stop the player, a raycast decides whether it can jump, the coils are pickups (triggers), and an enemy patrols with a raycast and reacts to the player through events.</td></tr>
+        <tr><td>First version of the user guide</td><td>Done. Engine/Collision/UserGuide.md is part of the Collision project, and it is also online (link at the top).</td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="images/es_pipeline.png" alt="The diagram from my proposal" width="900">
+      <figcaption>The diagram from my proposal. After this update everything in it exists: the game moves objects, Collision::Update() pushes solid objects apart and sends the events, and the game can ask Raycast() questions.</figcaption>
+    </figure>
+    <h2>The demo</h2>
+    <figure>
+      <img src="images/es2_d3d_scene.png" alt="MyGame (Direct3D, x64) just after it starts" width="900">
+      <figcaption>MyGame (Direct3D, x64) just after it starts. The player (orange) has fallen onto the floor. The yellow diamond under it is drawn where a ray cast straight down from the player hits the world. On the left the patroller (violet) walks back and forth in a pen behind a crate, under one pickup; on the right three steps of crates lead up to the other pickup. The floor, the two walls and the seven crates are static colliders, and the pickups are static triggers: 14 colliders in all.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_d3d_push_crate.png" alt="Holding the right arrow against the first step" width="900">
+      <figcaption>Holding the right arrow against the first step. Every update the player moves 0.05 units into the crate, and Collision::Update() pushes it back out and removes the velocity that points into the crate, so it stays pressed against the face. In Update #1 it would have gone straight through. The crate counts its touches in OnEnter and OnExit and is drawn red while anything touches it.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_d3d_marker_crate.png" alt="Jumping onto the fence crate" width="900">
+      <figcaption>Jumping onto the fence crate. The marker shows where the ground raycast hits, so while the player is still in the air the marker is already on top of the crate it will land on. The game only allows a jump when that hit is no more than the player's radius plus 0.05 below its center.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_d3d_top_step.png" alt="At the top of the steps (holding right and jump climbs them)" width="900">
+      <figcaption>At the top of the steps (holding right and jump climbs them). The pickup that floated here is gone: it is a trigger, and its OnEnter hides it and disables its collider. It comes back four seconds later. The top crate is red because the player is standing on it: resting on something counts as touching, so the crate got one OnEnter and then gets OnStay every update.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_d3d_bounce.png" alt="Landing on the patroller" width="900">
+      <figcaption>Landing on the patroller. Both are dynamic, so each is pushed half of the way out. The player's OnEnter looks at the contact normal, which points from the patroller toward the player. Mostly up means that it landed on top, so it bounces. Pickup 1 is gone because the player collected it on the way in.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_d3d_knockback.png" alt="When the patroller walks into the player from the side, the normal is mostly horizontal, so the player is knocked back (up and away from the patroller) and drawn red for half a second, and the patroller turns around and walks off to the left" width="900">
+      <figcaption>When the patroller walks into the player from the side, the normal is mostly horizontal, so the player is knocked back (up and away from the patroller) and drawn red for half a second, and the patroller turns around and walks off to the left. The player was knocked against the fence crate, which is red because the player is touching it.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/es2_gl_top_step.png" alt="The OpenGL (x86) build at the top of the steps" width="900">
+      <figcaption>The OpenGL (x86) build at the top of the steps. Both builds behave the same.</figcaption>
+    </figure>
+    <p>This is the beginning of the log from the run in the knockback screenshot (the player jumped over the fence crate into the pen). The system writes the layers when it starts. The rest comes from MyGame's event functions and its raycasts:</p>
+<pre><code>Collision: initialized with 4 layers from "data/Collision/game.binlayers"
+Collision:   layer 0 "world" touches: player, enemy
+Collision:   layer 1 "player" touches: world, enemy, pickup
+Collision:   layer 2 "enemy" touches: world, player
+Collision:   layer 3 "pickup" touches: player
+The application was successfully initialized
+MyGame: the patroller's raycast hit the fence crate 0.60 units ahead, so it turned around
+Collision: the player started touching the floor (normal +0.00 +1.00 +0.00, depth 0.100 before it was pushed out)
+MyGame: the patroller's raycast hit the left wall 0.60 units ahead, so it turned around
+Collision: the player stopped touching the floor (OnStay was called 79 times in between)
+Collision: the player started touching the fence crate (normal +1.00 +0.02 +0.00, depth 0.000 before it was pushed out)
+Collision: the player stopped touching the fence crate (OnStay was called 2 times in between)
+MyGame: the patroller's raycast hit the fence crate 0.60 units ahead, so it turned around
+Collision: the player started touching pickup 1 (above the pen) (normal +1.00 +0.00 +0.00, depth 0.047 before it was pushed out)
+MyGame: the player collected pickup 1 (above the pen) (1 collected so far)
+Collision: the player stopped touching pickup 1 (above the pen) (OnStay was called 0 times in between)
+Collision: the player started touching the patroller (normal +0.77 +0.64 +0.00, depth 0.054 before it was pushed out)
+MyGame: the patroller knocked the player back and turned around
+MyGame: the patroller's raycast hit the left wall 0.60 units ahead, so it turned around
+Collision: the player stopped touching the patroller (OnStay was called 0 times in between)
+Collision: the player started touching the patroller (normal +0.46 +0.89 +0.00, depth 0.016 before it was pushed out)
+MyGame: the player landed on the patroller and bounced off
+Collision: the player stopped touching the patroller (OnStay was called 0 times in between)</code></pre>
+    <p>The depths are now "before it was pushed out". Falling onto the floor at about 7 units per second sinks about 0.1 units into it in one update (MyGame updates its simulation 60 times a second now), and the push takes all of it out again. The touch with the fence crate's side has a depth of 0 because the player walks exactly 0.05 units per update and happened to stop right at the face. The patroller sees the wall and the crate at 0.60 units, its radius plus the 0.1 units that it looks ahead. The two touches with the patroller show the threshold in the player's OnEnter. The first normal, (0.77, 0.64), doesn't point up enough (0.7 is the threshold), so it counted as a hit from the side. The second, (0.46, 0.89), was a landing on its head.</p>
+    <h2>Solid response</h2>
+    <p><code>Collision::Update()</code> has one new step, between finding the pairs that touch and sending the events:</p>
+    <ul>
+      <li><strong>Remove the colliders that the game has released,</strong> sending OnExit to whatever they were still touching (unchanged from Update #1).</li>
+      <li><strong>Find every pair that touches</strong> (unchanged): pairs that are disabled, both static, or in layers that don't interact are skipped without any math, the bounding boxes reject most of the rest, and the exact test gives a normal and a depth.</li>
+      <li><strong>New: resolve the overlaps.</strong> For every touching pair where neither collider is a trigger, the dynamic collider(s) are moved apart and their velocities corrected (below).</li>
+      <li><strong>Compare with the previous update and send the events</strong> (unchanged): all the exits, then the enters, then the stays. The contacts still say how deep the colliders were before they were pushed apart.</li>
+      <li><strong>Remove the colliders that were released from inside an event</strong> (unchanged).</li>
+    </ul>
+    <figure>
+      <img src="images/es2_response.png" alt="Left: what the response does to a sphere that the game has moved into a static box" width="900">
+      <figcaption>Left: what the response does to a sphere that the game has moved into a static box. Right: the slab method that raycasts use for boxes (next section).</figcaption>
+    </figure>
+    <p>The rules come from my proposal. A collider is dynamic unless it is static, and solid unless it is a trigger:</p>
+    <ul>
+      <li><strong>Dynamic and static:</strong> the dynamic collider is moved all of the way out along the contact normal by the penetration depth, and the part of its velocity that points into the static collider is removed. The rest of the velocity is kept, so it slides along walls, and it can always move away from a surface (jumping off a floor).</li>
+      <li><strong>Dynamic and dynamic:</strong> each is moved half of the way, and the speed at which they were approaching each other is taken from both equally. That is what two objects with the same mass that don't bounce would do, and it keeps the system free of masses and materials, which my proposal left out on purpose.</li>
+      <li><strong>Triggers</strong> never push anything and are never pushed. Their events are sent as before.</li>
+    </ul>
+<pre><code>// cWorld.cpp, ResolveOverlaps(): called by Collision::Update() with every pair that touches
+// (solidPairs are the ones where neither collider is a trigger)
+for ( unsigned int passIndex = 0; ( passIndex &lt; s_maxResolutionPassCount ) &amp;&amp; !solidPairs.empty(); ++passIndex )
+{
+	bool wasAnythingMoved = false;
+	for ( const auto&amp; pair : solidPairs )
+	{
+		// The overlap is found again from where the colliders are now (an earlier pair might have moved one of them)
+		Math::sVector normal;	// (from b toward a)
+		float penetrationDepth;
+		if ( !Intersections::DoShapesTouch( GetShape_world( *pair.a ), GetShape_world( *pair.b ), normal, penetrationDepth ) )
+			continue;
+		auto&amp; rigidBody_a = pair.a-&gt;GetRigidBody();
+		auto&amp; rigidBody_b = pair.b-&gt;GetRigidBody();
+		if ( pair.b-&gt;IsStatic() )
+		{
+			// Only a moves: all of the way out, and it can't keep moving into b
+			rigidBody_a.position += normal * penetrationDepth;
+			RemoveVelocityIntoSurface( rigidBody_a.velocity, normal );
+		}
+		else if ( pair.a-&gt;IsStatic() )
+		{
+			rigidBody_b.position -= normal * penetrationDepth;
+			RemoveVelocityIntoSurface( rigidBody_b.velocity, -normal );
+		}
+		else
+		{
+			// Both are dynamic: each moves half of the way, and their approaching speed is taken from both equally
+			const auto halfOfTheCorrection = normal * ( penetrationDepth * 0.5f );
+			rigidBody_a.position += halfOfTheCorrection;
+			rigidBody_b.position -= halfOfTheCorrection;
+			const auto approachingSpeed = Math::Dot( rigidBody_a.velocity - rigidBody_b.velocity, normal );
+			if ( approachingSpeed &lt; 0.0f )
+			{
+				const auto halfOfTheVelocityChange = normal * ( approachingSpeed * 0.5f );
+				rigidBody_a.velocity -= halfOfTheVelocityChange;
+				rigidBody_b.velocity += halfOfTheVelocityChange;
+			}
+		}
+		if ( penetrationDepth &gt; 0.0f ) wasAnythingMoved = true;
+	}
+	// Once a pass doesn't move anything every overlap has been resolved
+	if ( !wasAnythingMoved ) break;
+}
+
+// RemoveVelocityIntoSurface(): moving away from the surface or along it is left alone
+const auto speedAlongNormal = Math::Dot( io_velocity, i_normal );
+if ( speedAlongNormal &lt; 0.0f )
+	io_velocity -= i_normal * speedAlongNormal;</code></pre>
+    <h3>Decisions</h3>
+    <ul>
+      <li><strong>Why the velocity has to change too:</strong> if only the position were fixed, gravity would keep adding speed to a ball resting on the floor, and our render-time extrapolation (<code>PredictFutureTransform()</code>) would draw it sinking into the floor between updates. With the correction a resting ball has a vertical velocity of exactly 0 after every update. A unit test drops a ball for two seconds and checks that it ends up at exactly the floor's height, still moving sideways at the speed it started with.</li>
+      <li><strong>Corners:</strong> a ball in a corner touches the floor and a crate at once, and moving it out of one can move it into the other. The overlaps are therefore resolved in up to four passes, each time from where the colliders are after the last pass, and it stops as soon as a pass moves nothing. A unit test pushes a ball into the corner between the floor and a crate and checks that it ends up touching both and overlapping neither.</li>
+      <li><strong>When the events are sent:</strong> after the response, so that an event function sees where its object really is now, but with the contact from before it, so that the depth still says how far the objects had sunk into each other. An object resting on another one stays "touching" because of the 0.001-unit tolerance from Update #1, so it gets OnStay every update instead of flickering between OnEnter and OnExit.</li>
+      <li><strong>Nothing else is touched:</strong> only the rigid body's position and velocity change, never its acceleration or orientation. The game still moves its objects however it wants, and a static collider that the game moves (a door, a moving platform) still pushes dynamic colliders out of its way.</li>
+      <li><strong>Tunneling:</strong> detection still only happens once per simulation update, which my proposal listed as a risk. It is documented in the header and the guide. MyGame avoids it in three ways. It updates its simulation 60 times a second instead of 15 (<code>GetSimulationUpdatePeriod_inSeconds()</code> is overridden). It never lets the player fall faster than 12 units per second, which is 0.2 units per update. And the floor's collider is now a whole unit thick.</li>
+    </ul>
+    <h2>Raycasts</h2>
+<pre><code>// Collision.h
+struct sRaycastHit
+{
+	cCollider* collider = nullptr;	// the closest collider that the ray hit (valid until the next Update())
+	Math::sVector point;	// where the ray entered it
+	Math::sVector normal;	// the surface's unit normal there, pointing back toward the side the ray came from
+	float distance = 0.0f;	// how far the point is from the ray's origin
+};
+bool Raycast( const Math::sVector&amp; i_origin, const Math::sVector&amp; i_direction, const float i_maxDistance,
+	sRaycastHit&amp; o_hit, const uint32_t i_layerMask = ~uint32_t( 0 ), const bool i_shouldTriggersBeHit = false );</code></pre>
+    <p>The direction can have any length except 0 (it is normalized). Only colliders whose layer is in the mask can be hit, so <code>Collision::GetLayerMask( "world" )</code> finds only walls and floors. The layers file's interactions don't matter here. Disabled colliders, triggers (unless asked for) and colliders that the game has already released are skipped. A ray that starts inside a collider doesn't hit that collider, so a ray cast from an object's center never hits its own collider (my ground check relies on that). Raycast() changes nothing, so it can be called at any time after Initialize(), even from inside an event, and <code>o_hit</code> is only written when something was hit. Every collider is tested, and each test only looks as far as the closest hit found so far.</p>
+    <ul>
+      <li><strong>Spheres:</strong> a point on the ray is on the sphere when its distance from the center is the radius, which is a quadratic in the distance along the ray (with a unit direction its first coefficient is 1). A ray that starts inside the sphere or points away from it is rejected before the square root. The smaller root is where the ray enters, and the normal points from the center through that point.</li>
+      <li><strong>Boxes:</strong> the slab method (the figure above). For each axis the ray enters and leaves the space between the box's two planes. It is inside the box after the last of the three entries and before the first exit, so it hits if the last entry comes before the first exit and isn't farther away than maxDistance. The axis of the last entry gives the face, and the normal is that face's. A ray parallel to a slab is either always inside it or never.</li>
+    </ul>
+    <h2>Using it from a game</h2>
+    <p>This is how MyGame uses the new parts (shortened). The names and numbers are MyGame's, but the patterns (a look-ahead ray, a ground check, a trigger that disables itself, reacting to the contact normal) work in any game:</p>
+<pre><code>// cMyGame::UpdateSimulationBasedOnTime() (shortened)
+// 1. The patroller looks ahead, only at the "world" layer, and turns around before it bumps into anything
+Collision::sRaycastHit hit;
+if ( Collision::Raycast( patroller.position, Math::sVector( m_patrollerDirection, 0.0f, 0.0f ),
+	s_patrollerRadius + 0.1f, hit, m_layerMask_world ) )
+{
+	m_patrollerDirection = -m_patrollerDirection;
+}
+patroller.velocity = Math::sVector( m_patrollerDirection * s_patrollerSpeed, 0.0f, 0.0f );
+// 2. Everything moves as usual (the player's acceleration is gravity); then the collision system
+//    pushes the player out of whatever it moved into and sends the events
+m_object_player.Update( i_elapsedSecondCount_sinceLastUpdate );
+m_object_patroller.Update( i_elapsedSecondCount_sinceLastUpdate );
+Collision::Update();
+// 3. The ground check: one ray straight down finds the world under the player
+if ( Collision::Raycast( player.position, Math::sVector( 0.0f, -1.0f, 0.0f ), 50.0f, hit, m_layerMask_world ) )
+{
+	m_isPlayerOnGround = hit.distance &lt;= ( s_playerRadius + 0.05f );
+	m_object_marker.rigidBodyState.position = hit.point + Math::sVector( 0.0f, 0.03f, 0.0f );
+}
+
+// cMyGame::UpdateSimulationBasedOnInput(): jumping is only possible on the ground
+if ( m_isPlayerOnGround &amp;&amp; ( UserInput::IsKeyPressed( UserInput::KeyCodes::Up ) || UserInput::IsKeyPressed( UserInput::KeyCodes::Space ) ) )
+	m_object_player.rigidBodyState.velocity.y = s_jumpSpeed;
+
+// A pickup's OnEnter (pickups are triggers in "pickup", and only "player" interacts with that layer)
+pickup.collider-&gt;OnEnter = [this, &amp;pickup, i_pickupIndex]( const Collision::sContact&amp; )
+{
+	pickup.isVisible = false;
+	pickup.collider-&gt;SetEnabled( false );	// nothing can touch it until it comes back
+	m_secondCount_untilPickupRespawns[i_pickupIndex] = s_pickupRespawnDelay;
+};
+
+// The player's OnEnter, when the other collider is the patroller
+// (the contact's normal points from the patroller toward the player)
+if ( i_contact.normal.y &gt;= 0.7f )
+{
+	velocity.y = s_bounceSpeed;	// it landed on the patroller's head
+}
+else if ( m_secondCount_hurtLeft &lt;= 0.0f )
+{
+	// hit from the side: knocked back, away from the patroller, which turns around
+	const auto awayFromThePatroller = ( i_contact.normal.x &gt;= 0.0f ) ? 1.0f : -1.0f;
+	velocity = Math::sVector( awayFromThePatroller * s_knockbackSpeed_sideways, s_knockbackSpeed_up, 0.0f );
+	m_patrollerDirection = -awayFromThePatroller;
+	m_secondCount_hurtLeft = s_hurtDuration;	// drawn red for half a second
+}</code></pre>
+    <p>The demo's data files changed a little: the floor's collider is thicker, there is a wall collider for the two new walls, and the spinner from Update #1 became the pickup collider that both pickups load. The layers file is the same as in Update #1 apart from its comments. The new wall mesh and the marker mesh are human-readable mesh files like the cube.</p>
+<pre><code>-- Colliders/floor.collider: a whole unit thick now (it was 0.1 in Update #1), with its top at the floor mesh's plane
+return
+{
+	shape = "box",
+	halfSize = { x = 4.0, y = 0.5, z = 4.0 },
+	center = { y = -0.5 },
+	layer = "world",
+	isStatic = true,
+}
+
+-- Colliders/wall.collider: matches the new 0.5 x 6 x 1 wall mesh (one at each end of the floor)
+return
+{
+	shape = "box",
+	halfSize = { x = 0.25, y = 3.0, z = 0.5 },
+	layer = "world",
+	isStatic = true,
+}
+
+-- Colliders/pickup.collider: the spinning coil from Update #1, now used by both pickups
+return
+{
+	shape = "box",
+	halfSize = { x = 0.55, y = 0.85, z = 0.55 },
+	layer = "pickup",
+	isTrigger = true,
+	isStatic = true,	-- (it turns, but an axis-aligned box that encloses it doesn't change)
+}</code></pre>
+    <h2>The user guide (first version)</h2>
+    <p>The guide is in <code>Engine/Collision/UserGuide.md</code>, which is part of the Collision project so that it shows up in Visual Studio next to the headers. It is also online at the link at the top of this page. It is written for a classmate who has never seen the system:</p>
+    <ul>
+      <li><strong>The two projects</strong> and what each one is for.</li>
+      <li><strong>Setting up a solution:</strong> adding the projects, the reference from the game, and BuildMyGameAssets' dependency on ColliderBuilder.</li>
+      <li><strong>What to add to AssetBuildFunctions.lua</strong> (the whole block, ready to paste), and why the colliders depend on the layers file.</li>
+      <li><strong>The layers file</strong> and <strong>collider files</strong>, with every key in a table and what ColliderBuilder checks.</li>
+      <li><strong>AssetsToBuild.lua,</strong> and where the built files end up.</li>
+      <li><strong>Using it in a game:</strong> Initialize(), loading and attaching colliders, Update(), CleanUp(), reference counting, and the rule that a rigid body must not move in memory.</li>
+      <li><strong>Events</strong> (what a contact contains, their order, what may be done inside one), <strong>raycasts</strong> (with a ground check and a line-of-sight example) and <strong>how the response works</strong>, with tips for walls, moving platforms and player input.</li>
+      <li><strong>Limits and troubleshooting:</strong> tunneling and how to avoid it, boxes that don't rotate, the number of layers, and a table of "my objects pass through each other"-type problems with what to check.</li>
+    </ul>
+    <p>The header comments were updated as well. <code>Collision.h</code> explains the three things that Update() does and has a raycast example, and <code>cCollider.h</code> has a new RESPONSE section.</p>
+    <h2>Testing</h2>
+    <ul>
+      <li><strong>89 unit tests</strong> (up from 42), built against the Debug library. There are 12 overlap tests from Update #1 and 14 new ray tests against single shapes: hits with the right distance and normal, a diagonal ray that enters a box through the face it reaches last, misses, rays that start inside or exactly on a shape, rays that point away, and max distances that are too short. The other 63 test the system, including raycasts against the world: the closest collider wins, layer masks (also combined with |), triggers only when asked for, a ray from inside an object's own collider, disabled and released colliders, and a non-unit direction. For the response: pushed out with the velocity corrected, a ball falling onto the floor with gravity, two dynamic spheres sharing the push and the speed, a ball in a corner, and triggers, disabled colliders and layers that don't interact not pushing. All pass. Where the Update #1 tests expected objects to stay inside each other, they now expect them to be pushed out.</li>
+      <li>The tests now build their own copies of the Update #1 data files with ColliderBuilder, so the demo's data can change without breaking them.</li>
+      <li>All four configurations (Debug/Release, x64/x86) build from an empty temp/ folder with no errors and no warnings. Building only the game and running it shows "Initialization failed!" and exits with code 1 (the first file it can't find is the layers file). After building BuildMyGameAssets it runs. Both ZIPs were unzipped and run on their own.</li>
+    </ul>
+    <h2>What is left for the final week</h2>
+    <p>The presentation is on Monday, November 16, and the final write-up is due on Thursday, November 19. What is left:</p>
+    <ul>
+      <li><strong>The download for classmates:</strong> a ZIP with the Collision and ColliderBuilder projects, the AssetBuildFunctions.lua block and example data. I will test the guide's setup steps by following them myself in a clean copy of my Assignment 08 solution, which has never had the collision system.</li>
+      <li><strong>Finishing the user guide</strong> with whatever that test and anyone who tries the system runs into, and putting it with the final write-up.</li>
+      <li><strong>The presentation:</strong> the demo, what a classmate has to do to use the system, and how it follows what we did for graphics (human-readable data, a builder that writes binary files, a platform-independent static library with reference-counted assets).</li>
+      <li><strong>Known limits to explain clearly, rather than fix this week:</strong> tunneling for very fast objects, dynamic pairs being treated as equal masses, and a single-ray ground check missing ledges where only the edge of the ball rests on a crate.</li>
+      <li><strong>If there is time, small additions from my stretch goals:</strong> an overlap query ("which colliders are inside this sphere?", e.g. for explosions) and a broad phase, if anyone's game needs a lot of colliders.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a></div>
+  </footer>
+</body>
+</html>
