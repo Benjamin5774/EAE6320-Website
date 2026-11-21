@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Final Project Proposal: Kitchen Raid – Benjamin Yang – EAE 6320</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="title" href="../index.html">Benjamin Yang · EAE 6320</a>
+      <nav>
+        <a href="../index.html">Assignments</a>
+        <a href="../engine-system/index.html">My Engine System</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Final Project Proposal: Kitchen Raid</h1>
+    <p class="subtitle">A small top-down sneaking game: a mouse steals cheese from a kitchen at night while the cats patrol. It uses my collision system and Feiyang Yang's AI state machine library.</p>
+
+    <div class="download">
+      <a class="btn" href="../engine-system/index.html">My Engine System: collision</a>
+      <a class="btn secondary" href="https://fffeiya.github.io/game-essay/engine-system-write-up/">Feiyang Yang's Engine System: AI state machine</a>
+      <small>This is the proposal for my final project, so there is nothing to download or play yet. The game, its download and its controls will be in the final write-up (due December 6; presentations are on December 7).</small>
+    </div>
+
+    <h2>The game</h2>
+    <p>Kitchen Raid (a working title) is a small top-down sneaking game. You are a mouse. It is night, the kitchen is full of cheese, and two cats are walking around the house. You win by bringing the big cheese wheel home without being caught.</p>
+    <p>For the final project we make a new game with the engine we built this semester, using our own Engine System and at least one Engine System made by a classmate. I wanted a game where both systems are needed for the main idea and aren't just added on the side. Sneaking only works if walls stop you and also hide you (collision and raycasts), and if the guards act differently when they see you and when they lose you (a state machine). It is also the game that Feiyang Yang and I sketched at the end of our joint Engine System presentation (<a href="https://fffeiya.github.io/game-essay/engine-system-presentation/">https://fffeiya.github.io/game-essay/engine-system-presentation/</a>), so now I get to find out whether that sketch really works.</p>
+    <h3>One round</h3>
+    <ul>
+      <li>You start in the mouse hole on the left. The camera looks down at the whole level at an angle, like an old arcade game, so you can always see where the cats are.</li>
+      <li>Six cheese crumbs are spread over the kitchen and the dining room. Run over a crumb to eat it. When all six are eaten, the pantry door unlocks.</li>
+      <li>The cheese wheel is in the pantry. Run into it to pick it up. Carrying it makes you slower.</li>
+      <li>Bring the wheel back to the mouse hole and you win: the background flashes green and a new round starts.</li>
+      <li>If a cat touches you, you are caught: the background flashes red and you are back in the mouse hole. If you were carrying the wheel, it goes back to the pantry. Crumbs you have eaten stay eaten, so every try gets you closer.</li>
+    </ul>
+    <h3>The cats</h3>
+    <p>Each cat walks its own patrol route. A cat sees you if you are within 6 units, inside the 90° in front of it, and nothing solid is between you: walls, furniture and closed doors all block its view. When a cat sees you, it chases you, faster than it walks. If you break its line of sight (behind the table, or through a door), it runs to the spot where it last saw you and looks around for a few seconds before it goes back to its route. A small marker above each cat's head shows its state, so the player (and the people watching my presentation) can see what it is thinking.</p>
+    <h3>Doors</h3>
+    <p>The door between the kitchen and the dining room opens when the mouse is close and closes again after the mouse has left. Cats can't open doors, so a closed door both stops a chasing cat and hides you from it. The pantry door works the same way, except that it starts locked (and red) until all six crumbs are eaten.</p>
+    <figure>
+      <img src="images/fp_level.png" alt="A sketch of the level, from above" width="900">
+      <figcaption>Figure 1. A sketch of the level, from above. Cat 1 can't see the mouse because its raycast hits the table first. Sizes and positions will change when I play-test it.</figcaption>
+    </figure>
+    <h3>Controls (planned)</h3>
+    <p>Arrow keys or WASD: move the mouse. Esc: quit. That is all: there is no jumping and nothing to aim.</p>
+    <h2>What the game will do, and what it won't</h2>
+    <h3>It will</h3>
+    <ul>
+      <li>be a new game project in my solution, next to ExampleGame and MyGame (MyGame stays my collision demo).</li>
+      <li>have one level: a kitchen, a dining room and a pantry, with walls, furniture, two doors, six crumbs, one cheese wheel and two cats.</li>
+      <li>let the mouse run around the floor; walls, furniture and closed doors stop both the mouse and the cats.</li>
+      <li>have cats that patrol, see the mouse (range, view angle and a raycast), chase it, search for it when they lose it, and catch it.</li>
+      <li>have doors that open for the mouse and close after it, and one door that stays locked until the crumbs are eaten.</li>
+      <li>show what is happening without any text: the background flashes red when you are caught and green when you win, the locked door is red, and every cat has a state marker.</li>
+      <li>use meshes that are fun to look at instead of boxes: a mouse, cats, cheese, a table, a fridge, a sofa. I'll make simple low-poly ones in Maya (or start from free models) and export them with the Maya exporter I wrote in Assignment 07. Colors come from vertex colors, since our meshes have no textures.</li>
+      <li>build without warnings in all four configurations (Direct3D and OpenGL, Debug and Release), and pass the usual test: build only the game first, then the assets.</li>
+    </ul>
+    <h3>It won't</h3>
+    <ul>
+      <li>have text, menus, a HUD, a score, lives or a timer. Our engine can't draw text, and the assignment doesn't need any of these.</li>
+      <li>have sound, textures or animation. The mouse and the cats are rigid meshes that turn to face the way they walk.</li>
+      <li>have pathfinding. A cat walks straight toward a waypoint, the mouse, or the place where it last saw the mouse. The collision response slides it along walls, but it can get stuck behind furniture. That is fine: it is one of the ways to escape.</li>
+      <li>have jumping or gravity. Everything happens on one floor, even though the colliders are 3D.</li>
+      <li>have more than one level, or saving.</li>
+      <li>have a second player or a gamepad: one player, with the keyboard.</li>
+      <li>use physics: no mass, bounce, friction or rotating colliders. My collision system only stops things and tells the game what touched what.</li>
+    </ul>
+    <h3>If I have time</h3>
+    <ul>
+      <li>A third cat that sleeps next to the pantry and only wakes up if you come too close (a fourth state, Asleep).</li>
+      <li>A Pounce state: when a chasing cat gets very close, it jumps forward fast and then has to wait for a moment, so you can dodge it.</li>
+      <li>A sneak key (hold Shift): slower, but quiet. Running close behind a cat would make it turn around.</li>
+      <li>A custom shader, for example cheese that glows and pulses, using the simulation time that is already in the per-frame constant buffer.</li>
+      <li>A camera that follows the mouse, so that the level can be bigger.</li>
+    </ul>
+    <h2>How I will use my Engine System (collision)</h2>
+    <p>My Engine System is a collision library (<a href="https://game6320-website.netlify.app/engine-system/">https://game6320-website.netlify.app/engine-system/</a>). Objects get spheres and axis-aligned boxes that are described in Lua files, layers say which kinds of objects touch, solid objects stop each other, triggers only report, the game gets OnEnter, OnStay and OnExit events, and it can cast rays. In Kitchen Raid it does most of the game's rules:</p>
+    <table>
+      <thead><tr><th>What happens in the game</th><th>How the collision system does it</th></tr></thead>
+      <tbody>
+        <tr><td>Walls and furniture stop you</td><td>static boxes in the wall layer; the mouse and the cats are solid spheres that get pushed back out, and their velocity into the wall is removed, so they slide along it</td></tr>
+        <tr><td>Eating a crumb, picking up the wheel</td><td>trigger spheres in the pickup layer; the mouse's OnEnter hides the crumb and disables its collider</td></tr>
+        <tr><td>Getting caught</td><td>the mouse's OnEnter with a collider in the cat layer</td></tr>
+        <tr><td>Getting home</td><td>a trigger box in the mouse hole; OnEnter wins the round if the mouse carries the wheel</td></tr>
+        <tr><td>Doors</td><td>a solid box that is disabled while the door is opening or open, and a bigger trigger box around it whose OnEnter and OnExit tell the door's state machine whether the mouse is near</td></tr>
+        <tr><td>Can a cat see the mouse?</td><td>after a distance and angle check, a raycast from the cat to the mouse that can hit walls, furniture, doors and the mouse: the cat sees the mouse only if the mouse is the first thing that the ray hits</td></tr>
+      </tbody>
+    </table>
+    <p>The layers file will be something like this (it may change while I build the game):</p>
+<pre><code>-- Content/Collision/game.layers (in the new game's folder)
+return
+{
+	layers = { "wall", "door", "mouse", "cat", "pickup", "zone" },
+
+	-- Pairs that touch; every other pair passes through without events
+	interactions =
+	{
+		{ "mouse", "wall" }, { "mouse", "door" }, { "mouse", "cat" },
+		{ "mouse", "pickup" }, { "mouse", "zone" },
+		{ "cat", "wall" }, { "cat", "door" }, { "cat", "cat" },
+	},
+}</code></pre>
+    <p>And the line of sight is the example from my own user guide, with a door layer added:</p>
+<pre><code>// Can this cat see the mouse? (after a distance and view angle check)
+const auto toMouse = m_mouse.rigidBodyState.position - cat.rigidBodyState.position;
+Collision::sRaycastHit hit;
+const bool canSeePlayer = isInViewCone( cat, toMouse )
+	&amp;&amp; Collision::Raycast( cat.rigidBodyState.position, toMouse, toMouse.GetLength(), hit,
+		m_layerMask_wall | m_layerMask_door | m_layerMask_mouse )
+	&amp;&amp; ( hit.collider == m_mouse.collider );</code></pre>
+    <p>This will also be the first time that my collision system goes into a game I didn't write it for. I'll add it to the new game project by following my own README and user guide, and in the final write-up I'll say what was easy and what I would change. My demo already has a patroller that uses raycasts, but a door that is only sometimes solid, and trigger zones that turn into parameters for another system, will test parts of the interface that the demo hardly used.</p>
+    <figure>
+      <img src="images/fp_start_demo.png" alt="Where I'm starting from: my Engine System demo (MyGame), a small platformer built on the same collision system" width="720">
+      <figcaption>Figure 2. Where I'm starting from: my Engine System demo (MyGame), a small platformer built on the same collision system. The final game will be a new project.</figcaption>
+    </figure>
+    <h2>The other Engine System: Feiyang Yang's AI state machine</h2>
+    <p>I will use the AI state machine library made by Feiyang Yang. Its write-up is at <a href="https://fffeiya.github.io/game-essay/engine-system-write-up/">https://fffeiya.github.io/game-essay/engine-system-write-up/</a>, and I'll use the code ZIP from that page (<a href="https://fffeiya.github.io/files/EngineSystem_StateMachine.zip">https://fffeiya.github.io/files/EngineSystem_StateMachine.zip</a>). Feiyang and I presented our Engine Systems together, so I already know how it works, and we found that the two systems fit together well.</p>
+    <p>With it, an AI is described in a Lua <code>.fsm</code> file: the initial state, the parameters that the game sets (floats, bools and triggers), the states, and the transitions between them. A transition fires when all of its conditions are true and, if it has one, its minimum time in the state has passed, and the "any state" transitions are checked first. StateMachineBuilder checks the file and builds it into a binary <code>.fsmbin</code> file during the asset build, the same way our MeshBuilder works, and a mistake in the file fails the build with the file and line. In the game, a <code>cStateMachineDefinition</code> is loaded once (it is reference counted, like a mesh) and every agent gets its own <code>cStateMachine</code>. The game looks up state and parameter handles by name once, then every simulation update it sets the parameters (<code>SetBool()</code>, <code>SetFloat()</code>, <code>SetTrigger()</code>) and calls <code>Update()</code>. At most one transition fires per update, and each state can have enter, update and exit callbacks: function pointers with a <code>void*</code> for user data, like the rest of the engine. In Debug builds every state change is written to the log together with the condition that caused it, which will help a lot when a cat does something strange.</p>
+    <h3>What it will do in my game</h3>
+    <ul>
+      <li><strong>The cats</strong> (<code>cat.fsm</code>: one definition, and one <code>cStateMachine</code> per cat): Patrol, Chase and Search, plus an any-state transition back to Patrol when a cat catches the mouse. My game sets canSeePlayer (from the raycast), distanceToPlayer, and the caughtPlayer trigger (from a collision event). The state callbacks do the moving, and each cat's callbacks get that cat as their user data (the way Feiyang's door example does it): Patrol walks to the next waypoint, Chase runs at the mouse and remembers where it last saw it, and Search walks to that spot and turns around. After 4 seconds in Search (<code>minimumTimeInState</code>) the cat goes back to patrolling. Feiyang's write-up warns that a minimum time in the state is not the same as "4 seconds without seeing the player", but here it is: a cat enters Search at the moment it loses the mouse, and seeing the mouse again sends it back to Chase. Each state's enter callback also changes the marker above the cat's head.</li>
+      <li><strong>The doors</strong> (<code>door.fsm</code>: one <code>cStateMachine</code> per door): this is the door.fsm example that comes with Feiyang's library, used as it is. It has five states (Closed, Opening, Open, Closing and Locked), an isPlayerNear bool, a toggleLock trigger, and timed transitions that give the door a second to slide. Feiyang's demo sets isPlayerNear from a distance; my game will set it from the door's trigger zone instead, and sends toggleLock to lock the pantry door at the start and to unlock it when the last crumb is eaten. Opening's enter callback switches the door's solid collider off, Closing's switches it back on, and Locked makes the door red.</li>
+      <li><strong>The order</strong> (Figure 5): every simulation update, first the game moves everything, then <code>Collision::Update()</code> pushes things apart and sends the events, then the game turns the events and raycasts into parameters, and last every state machine updates and its callbacks set the velocities for the next update. That is the order that Feiyang and I described in our presentation; now it has to work in a real game.</li>
+    </ul>
+    <figure>
+      <img src="images/fp_cat_fsm.png" alt="The cat's state machine, written as data for Feiyang Yang's library" width="900">
+      <figcaption>Figure 3. The cat's state machine, written as data for Feiyang Yang's library. canSeePlayer comes from a raycast and caughtPlayer from a collision event, both from my collision system.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/fp_door_fsm.png" alt="The door's state machine: Feiyang Yang's door" width="900">
+      <figcaption>Figure 4. The door's state machine: Feiyang Yang's door.fsm example. isPlayerNear comes from the door's trigger zone (OnEnter and OnExit), and the toggleLock trigger locks the pantry door at the start and unlocks it when the last crumb is eaten.</figcaption>
+    </figure>
+    <figure>
+      <img src="images/fp_update.png" alt="One simulation update" width="900">
+      <figcaption>Figure 5. One simulation update. Orange is my game code, blue is my collision system, and green is Feiyang Yang's state machine library.</figcaption>
+    </figure>
+    <p>Why a state machine instead of a few if statements? Even three states with timers would turn into a tangle of bools in C++. In a data file I can tune when a cat gives up, or add the Asleep or Pounce state, without changing the code that moves the cats, and the debug log tells me exactly which condition fired.</p>
+    <h2>Plan</h2>
+    <table>
+      <thead><tr><th>When</th><th>What</th></tr></thead>
+      <tbody>
+        <tr><td>Nov 21 to 24</td><td>Create the new game project and make it build in all four configurations. Add Feiyang's StateMachine library and StateMachineBuilder by following their README. Walls, floor, and the mouse moving with my collision system.</td></tr>
+        <tr><td>Nov 25 to 29</td><td>The cats: patrol routes, raycast vision, cat.fsm with Chase and Search, getting caught. The crumbs, the cheese wheel and getting home.</td></tr>
+        <tr><td>Nov 30 to Dec 3</td><td>Doors and door.fsm. Meshes in Maya (the mouse, a cat, cheese, furniture). The camera. Play-testing the speeds and how far the cats can see. Then the "if I have time" list.</td></tr>
+        <tr><td>Dec 4 to 6</td><td>Release builds and the download ZIP, screenshots, and the final write-up (due December 6).</td></tr>
+        <tr><td>Dec 7</td><td>The presentation in class.</td></tr>
+      </tbody>
+    </table>
+    <h3>What could go wrong</h3>
+    <ul>
+      <li><strong>Cats getting stuck on furniture while they chase you.</strong> Search gives up after a few seconds anyway, and I'll keep furniture away from the patrol routes. If it still looks bad, a cat that hasn't moved for a second could give up the chase.</li>
+      <li><strong>Setting up a library that I didn't write might show problems with its instructions.</strong> Finding that out is part of the point of the final project. I'll write down what happened, and tell Feiyang about anything that should be fixed.</li>
+      <li><strong>Fast objects tunneling through thin walls.</strong> My collision system tests for overlaps once per update. Walls will be at least 0.5 units thick, and nothing will move faster than about 8 units per second (at 60 updates per second that is about 0.13 units per update).</li>
+      <li><strong>Meshes taking longer than I think.</strong> Everything will work with spheres and boxes first. Meshes are only data, so they can be swapped in at the end without changing any code.</li>
+    </ul>
+    <h2>Credits</h2>
+    <ul>
+      <li><strong>AI state machine (Engine System): Feiyang Yang</strong>, <a href="https://fffeiya.github.io/game-essay/engine-system-write-up/">https://fffeiya.github.io/game-essay/engine-system-write-up/</a> (all of Feiyang's write-ups: <a href="https://fffeiya.github.io/game-essay/">https://fffeiya.github.io/game-essay/</a>)</li>
+      <li><strong>Collision (Engine System): Benjamin Yang</strong> (me), <a href="https://game6320-website.netlify.app/engine-system/">https://game6320-website.netlify.app/engine-system/</a></li>
+      <li>The engine itself is the one we have been building all semester in EAE 6320 (Game Engineering II) at the University of Utah.</li>
+    </ul>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">Benjamin Yang · <a href="../index.html">All assignments</a> · <a href="../engine-system/index.html">Engine System: collision</a></div>
+  </footer>
+</body>
+</html>
